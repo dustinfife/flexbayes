@@ -1,0 +1,23 @@
+Package: flexbayes
+Title: Bayesian Extensions for Flexplot
+Version: 0.0.0.9000
+Authors@R: person("Dustin", "Fife", role = c("aut", "cre"), email = "maintainer@example.com")
+Description: Extends the existing flexplot modeling interface with Bayesian
+    model support for parameter estimates, visualization, model comparison,
+    and fit comparison.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.1.0),
+    flexplot
+Suggests:
+    testthat (>= 3.0.0),
+    brms,
+    rstanarm,
+    insight,
+    parameters,
+    posterior,
+    bayestestR
+Config/testthat/edition: 3

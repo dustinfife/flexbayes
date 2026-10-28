@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Rcheck/
+.Rbuildignore
+*.tar.gz
+*.Rcheck/
+.DS_Store
