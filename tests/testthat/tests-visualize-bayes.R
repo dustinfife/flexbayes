@@ -22,11 +22,11 @@ test_that("posterior predictions are numerically correct", {
   data = bayes_visualize_data(model)
   formula = mpg ~ hp
   
-  grid = flexplot:::generate_predictors(
+  grid = suppressMessages(flexplot:::generate_predictors(
     data = data,
     formula = formula,
     model = model
-  )
+  ))
   
   expected = colMeans(
     brms::posterior_epred(
@@ -36,11 +36,11 @@ test_that("posterior predictions are numerically correct", {
     )
   )
   
-  actual = bayes_visualize_predictions(
+  actual = suppressMessages(bayes_visualize_predictions(
     model,
     data,
     formula
-  )
+  ))
   
   expect_equal(actual$prediction, expected, tolerance = 1e-8)
   expect_equal(actual$model, rep("Posterior mean", nrow(actual)))
@@ -51,11 +51,11 @@ test_that("visualize produces a valid regression plot", {
   
   model = get_test_model()
   
-  p = flexplot::visualize(
+  p = suppressMessages(flexplot::visualize(
     model,
     plot = "model",
     formula = mpg ~ hp
-  )
+  ))
   
   expect_s3_class(p, "ggplot")
   
@@ -68,6 +68,17 @@ test_that("visualize produces a valid regression plot", {
   expect_true(has_line)
 })
 
+test_that("default formula generation works", {
+  
+  model = get_test_model()
+  
+  p = suppressMessages(flexplot::visualize(
+    model,
+    plot = "model"
+  ))
+  
+  expect_s3_class(p, "ggplot")
+})
 
 test_that("Bayesian plots render correctly across layouts", {
   
@@ -83,32 +94,22 @@ test_that("Bayesian plots render correctly across layouts", {
   
   for (name in names(plots)) {
     
-    p = flexplot::visualize(
-      model,
-      plot = "model",
-      formula = plots[[name]]
-    )
-    
-    vdiffr::expect_doppelganger(
-      paste0("Bayesian ", name),
-      p
-    )
+    withr::with_seed(123, {
+      
+      p = suppressMessages(flexplot::visualize(
+        model,
+        plot = "model",
+        formula = plots[[name]]
+      ))
+      
+      vdiffr::expect_doppelganger(
+        paste0("Bayesian ", name),
+        p
+      )
+      
+    })
   }
 })
-
-
-test_that("default formula generation works", {
-  
-  model = get_test_model()
-  
-  p = flexplot::visualize(
-    model,
-    plot = "model"
-  )
-  
-  expect_s3_class(p, "ggplot")
-})
-
 
 test_that("unsupported plot types produce an error", {
   
