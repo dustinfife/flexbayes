@@ -1,11 +1,6 @@
 # Bayesian visualization tests
 
-get_test_model = function() {
-  readRDS(testthat::test_path("fixtures", "brms_mtcars.rds"))
-}
-
-
-test_that("brms formulas are handled correctly", {
+ test_that("brms formulas are handled correctly", {
   
   f = brms::bf(mpg ~ hp + wt)
   
@@ -15,6 +10,32 @@ test_that("brms formulas are handled correctly", {
   expect_equal(all.vars(result), c("mpg", "hp", "wt"))
 })
 
+test_that("posterior lines respect conditioned panels", {
+  
+  model = get_test_model()
+  
+  p = suppressMessages(
+    flexplot::visualize(
+      model,
+      formula = mpg ~ hp | wt,
+      posterior_lines = 20,
+      seed = 123
+    )
+  )
+  
+  expect_length(p$layers, 3)
+  
+  lines = p$layers[[3]]$data
+  
+  groups_per_panel = aggregate(
+    .posterior_group ~ wt_binned,
+    data = lines,
+    FUN = function(x) length(unique(x))
+  )
+  
+  expect_equal(nrow(groups_per_panel), 3L)
+  expect_true(all(groups_per_panel$.posterior_group == 20))
+})
 
 test_that("posterior predictions are numerically correct", {
   

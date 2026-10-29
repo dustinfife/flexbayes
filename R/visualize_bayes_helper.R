@@ -75,3 +75,48 @@ bayes_visualize_predictions = function(object, data, formula, ...) {
   predictions$model = "Posterior mean"
   predictions
 }
+
+
+# Apply flexplot's own prediction processing to each sampled draw.
+# This preserves its binning, grouping and faceting conventions rather than
+# maintaining a second implementation of those rules.
+bayes_visualize_posterior_lines = function(draws, grid, formula, data, x,
+                                           posterior_lines = 50, seed = NULL, ...) {
+  if (!is.null(seed)) {
+    selected = withr::with_seed(seed, sample.int(nrow(draws),
+                                             min(posterior_lines, nrow(draws))))
+  } else {
+    selected = sample.int(nrow(draws), min(posterior_lines, nrow(draws)))
+  }
+
+  processed = lapply(selected, function(i) {
+    prediction = grid
+    prediction$prediction = draws[i, ]
+    prediction$model = "Posterior mean"
+    plot = flexplot::flexplot(
+      formula, data = data, prediction = prediction,
+      suppress_smooth = TRUE, ...
+    )
+    # flexplot's prediction layer contains the transformed prediction data.
+    layer = which(vapply(plot$layers, function(x) {
+      is.data.frame(x$data) && "prediction" %in% names(x$data)
+    }, logical(1)))
+    if (length(layer) != 1L) {
+      stop("Could not uniquely identify flexplot's prediction layer.")
+    }
+    result = plot$layers[[layer]]$data
+    result$.posterior_draw = i
+    result
+  })
+
+  lines = do.call(rbind, processed)
+  grouping = setdiff(names(lines), c(x, "prediction", "model",
+                                     ".posterior_draw", ".posterior_group"))
+  if (length(grouping)) {
+    lines$.posterior_group = interaction(lines[c(".posterior_draw", grouping)],
+                                         drop = TRUE, lex.order = TRUE)
+  } else {
+    lines$.posterior_group = factor(lines$.posterior_draw)
+  }
+  lines
+}
