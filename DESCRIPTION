@@ -19,7 +19,8 @@ Suggests:
     insight,
     parameters,
     posterior,
-    bayestestR
+    bayestestR,
+    vdiffr
 Config/testthat/edition: 3
 LazyData: true
 Imports: 

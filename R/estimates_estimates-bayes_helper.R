@@ -131,6 +131,7 @@ bayes_extract_model = function(object) {
 }
 
 
+
 # POSTERIOR SUMMARIES -----------------------------------------
 
 bayes_summarize = function(x, name = "") {

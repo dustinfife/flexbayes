@@ -28,13 +28,20 @@ bayes_visualize_data = function(object) {
   stop("Unsupported model class.")
 }
 
-bayes_visualize_formula = function(object, data) {
+bayes_model_formula = function(object) {
   
   model_formula = stats::formula(object)
   
   if (inherits(model_formula, "brmsformula")) {
-    model_formula = model_formula$formula
+    return(model_formula$formula)
   }
+  
+  model_formula
+}
+
+bayes_visualize_formula = function(object, data) {
+  
+  model_formula = bayes_model_formula(object)
   
   response = all.vars(model_formula)[1]
   

@@ -122,7 +122,6 @@ test_that("pairwise differences match posterior draws", {
   
 })
 
-
 test_that("interaction models are supported", {
   
   data("small_brms_interaction", package = "flexbayes")
