@@ -8,7 +8,7 @@ test_that("Gaussian defaults match backend scaling and contrasts", {
   expect_equal(unname(p$model$reference), c(3.5, .5))
   expect_equal(p$parameters$term, c(0L, 1L, 2L, NA_integer_))
   expect_s3_class(plot(p), "ggplot")
-  expect_equal(summary(p), p)
+  expect_equal(summary(p)$object, p)
 })
 
 test_that("beliefs validate syntax and numeric targets", {
@@ -108,13 +108,13 @@ test_that("summary expands details and hides stable IDs", {
   p = update(p, parameter = "x", belief(mean = 1), belief(sd = 2))
   p = update(p, parameter = "x", remove = 1, belief(mode = 3))
   expect_equal(vapply(p$beliefs$x, `[[`, integer(1), "id"), c(2L, 3L))
-  output = paste(capture.output({ result = summary(p) }), collapse = "\n")
+  output = paste(capture.output({ result = print(summary(p)) }), collapse = "\n")
   expect_match(output, "1. sd = 2", fixed = TRUE)
   expect_match(output, "2. mode = 3", fixed = TRUE)
   expect_false(grepl("\\[|Score:|Residual", output))
   expect_match(output, "Centered intercept reference")
   expect_match(output, "3.5")
-  expect_equal(result, p)
+  expect_equal(result$object, p)
   details = paste(capture.output(summary(p, diagnostics = TRUE)), collapse = "\n")
   expect_match(details, "Normal candidate: accepted")
   expect_match(details, "Target.*Achieved.*Tolerance.*Residual")
@@ -134,4 +134,28 @@ test_that("summary reports failed candidates and reference limitations", {
   expect_match(text, "Inconsistent mean beliefs")
   expect_match(text, "rejected before evaluation")
   expect_error(summary(p, diagnostics = NA), "diagnostics")
+})
+
+test_that("summary auto-printing and explicit printing display exactly once", {
+  p = update(prior_example(), parameter = "x", belief(mean = 1))
+  original = p
+  for (diagnostics in c(FALSE, TRUE)) {
+    # Emulate the REPL: only automatically print a visible return value.
+    automatic = capture.output({
+      result = withVisible(summary(p, diagnostics = diagnostics))
+      if (result$visible) print(result$value)
+    })
+    explicit = capture.output(print(summary(p, diagnostics = diagnostics)))
+    expect_true(result$visible)
+    expect_identical(automatic, explicit)
+    expect_equal(sum(grepl("^Priors ", explicit)), 1L)
+    expect_equal(sum(grepl("Parameter.*Prior.*Source.*Beliefs", explicit)), 1L)
+    expect_equal(sum(grepl("Beliefs for x:", explicit, fixed = TRUE)), 1L)
+    expect_identical(any(grepl("Score:", explicit, fixed = TRUE)), diagnostics)
+    expect_s3_class(result$value, "summary.flexbayes_priors")
+    expect_equal(result$value$object, original)
+    expect_length(capture.output({ saved = summary(p, diagnostics = diagnostics) }), 0)
+    expect_identical(capture.output(print(saved)), explicit)
+  }
+  expect_identical(p, original)
 })

@@ -83,10 +83,17 @@ print.flexbayes_priors = function(x, ...) {
 #' @param diagnostics Include constraint targets, achieved values, standardized
 #'   residuals, and candidate fit scores.
 #' @param ... Reserved.
-#' @return The original object, invisibly, after displaying its summary.
+#' @return A summary.flexbayes_priors object, displayed by its print method.
 #' @export
 summary.flexbayes_priors = function(object, diagnostics = FALSE, ...) {
   if (!is.logical(diagnostics) || length(diagnostics) != 1L || is.na(diagnostics)) stop("diagnostics must be TRUE or FALSE.")
+  structure(list(object = object, diagnostics = diagnostics), class = "summary.flexbayes_priors")
+}
+
+#' @export
+print.summary.flexbayes_priors = function(x, ...) {
+  object = x$object
+  diagnostics = x$diagnostics
   print(object)
   for (name in names(object$beliefs)) {
     records = object$beliefs[[name]]
@@ -132,7 +139,7 @@ summary.flexbayes_priors = function(object, diagnostics = FALSE, ...) {
     reference = object$model$reference
     if (length(reference)) print(data.frame(Column = names(reference), Reference = unname(reference)), row.names = FALSE, digits = 4) else cat("Intercept-only model; no predictor columns.\n")
   } else cat("No intercept; predictors are not centered.\n")
-  invisible(object)
+  invisible(x)
 }
 
 #' Plot selected and candidate prior densities
