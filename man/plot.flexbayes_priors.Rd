@@ -11,7 +11,9 @@
 
 \item{parameter}{Optional parameter name. When supplied, compare acceptable candidates.}
 
-\item{scale}{Plot in original or standardized slope units. Standardized plots require one supported parameter.}
+\item{scale}{Plot in original, standardized, probability or response units.
+Outcome scales require the matching GLM centered intercept; densities
+include the transformation Jacobian.}
 
 \item{...}{Reserved.}
 }

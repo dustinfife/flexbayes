@@ -5,11 +5,14 @@
 #' @param probability Probability of the comparison.
 #' @param mean,mode,sd Numeric moment or mode target; supply one.
 #' @param tolerance Absolute acceptance tolerance on the target scale.
-#' @param scale Units of the belief: original (default) or standardized slope.
+#' @param scale Units: original (default), standardized Gaussian slope,
+#'   probability for a logistic centered intercept, or response for a Poisson
+#'   centered intercept. Outcome means, modes and SDs constrain the induced
+#'   distribution, not a naively transformed link-scale moment.
 #' @return A prior_belief record.
 #' @export
 belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd = NULL, tolerance = 1e-6, scale = "original") {
-  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized")) stop("scale must be original or standardized.")
+  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response")) stop("scale must be original, standardized, probability or response.")
   expr = substitute(expression)
   targets = list(mean = mean, mode = mode, sd = sd)
   supplied = !vapply(targets, is.null, logical(1))
@@ -27,7 +30,7 @@ belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd =
     out = list(type = type, target = target, label = paste(type, "=", target))
   }
   out$scale = scale
-  if (scale == "standardized") out$label = paste0(out$label, " [standardized]")
+  if (scale != "original") out$label = paste0(out$label, " [", scale, "]")
   out$tolerance = tolerance
   class(out) = "prior_belief"
   out
@@ -78,6 +81,7 @@ prior_fit_location_scale = function(records, reference, family = "normal") {
 }
 
 prior_distribution_target = function(record, prior) {
+  if (prior_outcome_scale(record$scale)) return(prior_outcome_target(record, prior))
   if (record$type != "probability") return(prior_distribution_operation(prior, record$type))
   p = prior_distribution_operation(prior, "cdf", record$threshold)
   if (record$operator %in% c("<", "<=")) p else 1 - p

@@ -25,7 +25,10 @@ real numeric value. The original comparison is retained.}
 
 \item{tolerance}{Absolute acceptance tolerance on the target scale.}
 
-\item{scale}{Units of the belief: original (default) or standardized slope.}
+\item{scale}{Units: original (default), standardized Gaussian slope,
+probability for a logistic centered intercept, or response for a Poisson
+centered intercept. Outcome means, modes and SDs constrain the induced
+distribution, not a naively transformed link-scale moment.}
 }
 \value{
 A prior_belief record.

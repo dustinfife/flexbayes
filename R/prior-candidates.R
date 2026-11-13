@@ -2,7 +2,8 @@ prior_fit_candidates = function(records, reference) {
   families = c("normal", "student_t")
   boundary = any(vapply(records, function(r) r$type == "probability" && r$target %in% c(0, 1), logical(1)))
   alternatives = stats::setNames(lapply(families, function(family) {
-    candidate = if (boundary) list(valid = FALSE, message = "Boundary probability is consistent, but no supported continuous family attains it at a finite threshold.") else prior_fit_location_scale(records, reference, family)
+    outcome = any(vapply(records, function(r) prior_outcome_scale(r$scale), logical(1)))
+    candidate = if (outcome) prior_fit_outcome(records, reference, family) else if (boundary) list(valid = FALSE, message = "Boundary probability is consistent, but no supported continuous family attains it at a finite threshold.") else prior_fit_location_scale(records, reference, family)
     candidate$family = family
     candidate
   }), families)
@@ -56,7 +57,7 @@ prior_select_compatible = function(object) {
     if (length(eligible)) {
       chosen = eligible[[which.min(vapply(eligible, `[[`, numeric(1), "rank"))]]
       # Remove diagnostics left over from a previous automatic selection.
-      fields = c("family", "distribution", "achieved", "residuals", "score", "rank", "reference_used")
+      fields = c("family", "distribution", "achieved", "residuals", "score", "rank", "reference_used", "numerical", "convergence")
       result[fields] = lapply(fields, function(field) chosen[[field]])
       result$valid = TRUE
       result$status = "selected"

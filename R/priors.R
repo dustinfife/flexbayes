@@ -105,6 +105,8 @@ print.summary.flexbayes_priors = function(x, ...) {
         prior_console_line(paste0("Belief ", i, ": SD(y)/SD(x) = ", format(r$standardization_factor, digits = 6), "; original-scale equivalent: ", equivalent))
       }
     }
+    outcome_records = Filter(function(r) prior_outcome_scale(r$scale), records)
+    if (length(outcome_records)) prior_console_line("Outcome-scale beliefs describe the expected outcome at the model-matrix centering reference, not individual observed outcomes.")
     candidate = object$candidates[[name]]
     if (!is.null(candidate$message)) prior_console_line(paste0("Warning (", name, "): ", candidate$message))
     if (diagnostics && identical(candidate$status, "contradictory")) {
@@ -116,6 +118,12 @@ print.summary.flexbayes_priors = function(x, ...) {
           prior_console_line(paste0("  ", alternative$family, ": ", if (isTRUE(alternative$valid)) paste0("acceptable, mathematical rank ", alternative$rank) else paste0("rejected; ", alternative$message)))
         }
         if (!is.null(candidate$mathematical)) prior_console_line(paste("Mathematical preference:", prior_format(candidate$mathematical)))
+      }
+      if (length(outcome_records)) {
+        induced = if (outcome_records[[1]]$scale == "probability") "logit-normal / logit-Student's t" else "lognormal / exponentiated Student's t"
+        prior_console_line(paste("Induced candidate families:", induced))
+        if (!is.null(candidate$numerical)) prior_console_line(candidate$numerical)
+        if (!is.null(candidate$convergence)) prior_console_line(paste("Optimizer convergence code:", candidate$convergence))
       }
       if (!is.null(candidate$score)) cat("  Score: ", format(candidate$score, digits = 4), "\n", sep = "")
       if (!is.null(candidate$achieved)) {
@@ -142,13 +150,19 @@ print.summary.flexbayes_priors = function(x, ...) {
 #' Plot selected and candidate prior densities
 #' @param x Prior specification.
 #' @param parameter Optional parameter name. When supplied, compare acceptable candidates.
-#' @param scale Plot in original or standardized slope units. Standardized plots require one supported parameter.
+#' @param scale Plot in original, standardized, probability or response units.
+#'   Outcome scales require the matching GLM centered intercept; densities
+#'   include the transformation Jacobian.
 #' @param ... Reserved.
 #' @return A ggplot object.
 #' @export
 plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
-  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized")) stop("scale must be original or standardized.")
+  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response")) stop("scale must be original, standardized, probability or response.")
   factor = 1
+  if (prior_outcome_scale(scale)) {
+    if (is.null(parameter) || length(parameter) != 1L) stop("Select the centered intercept for an outcome-scale plot.")
+    prior_outcome_validate(list(scale = scale, type = "mean", target = if (scale == "probability") .5 else 1), x, parameter)
+  }
   if (scale == "standardized") {
     if (is.null(parameter) || length(parameter) != 1L) stop("Select one parameter for a standardized plot.")
     factor = prior_standardization_factor(x, parameter)
@@ -169,10 +183,20 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
       p = distributions[[label]]
       grid = prior_distribution_operation(p, "quantile", seq(.001, .999, length.out = 501))
       density = prior_distribution_operation(p, "density", grid)
+      if (prior_outcome_scale(scale)) {
+        outcome = if (scale == "probability") stats::plogis(grid) else exp(grid)
+        jacobian = if (scale == "probability") outcome * (1 - outcome) else outcome
+        density = density / jacobian
+        keep = is.finite(outcome) & is.finite(density) & jacobian > 0
+        if (any(!keep)) warning("Some transformed density points reached numerical boundaries and were omitted from the plot.", call. = FALSE)
+        grid = outcome[keep]
+        density = density[keep]
+        if (!length(grid)) stop("Transformed density cannot be displayed reliably at this numerical scale.")
+      }
       selected = identical(p, x$selected[[name]])
       rows[[length(rows) + 1L]] = data.frame(value = grid / factor, density = density * factor, parameter = name,
         Candidate = paste0(label, if (selected) " (selected)" else " (mathematical only)"))
     }
   }
-  ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else if (x$model$family$family == "binomial") "Coefficient (log-odds)" else if (x$model$family$family == "poisson") "Coefficient (log-rate)" else "Parameter value", y = "Prior density")
+  ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else if (scale == "probability") "Probability at centering reference" else if (scale == "response") "Expected count at centering reference" else if (x$model$family$family == "binomial") "Coefficient (log-odds)" else if (x$model$family$family == "poisson") "Coefficient (log-rate)" else "Parameter value", y = "Prior density")
 }

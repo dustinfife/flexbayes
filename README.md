@@ -329,3 +329,76 @@ prior-only mode even for these GLMs). Its unused backend default does not
 create a model parameter. `fit()` continues returning native `stanreg` objects;
 existing Gaussian-only estimate methods are not extended to GLM summaries.
 Optional Stan tests fit both GLM families when `FLEXBAYES_RUN_STAN=true`.
+
+### Outcome-scale centered-intercept beliefs (Phase 6B)
+
+```r
+# Logistic centered intercept: success probability at the centering reference
+p = update(p, parameter = "(Intercept)",
+  belief(mode = .7, scale = "probability"),
+  belief(value < .9, probability = .95, scale = "probability"))
+plot(p, parameter = "(Intercept)", scale = "probability")
+# Poisson alternative, using a Poisson prior object:
+# p = update(p, parameter = "(Intercept)",
+#   belief(mode = 3, scale = "response"),
+#   belief(value < 6, probability = .95, scale = "response"))
+```
+
+These constraints describe the distribution of the **expected outcome at the
+existing model-matrix centering reference**. For logistic models this is a
+success probability; for Poisson models it is an expected count, not an
+individual Poisson observation. Only the centered intercept is eligible.
+Scales must match the model family. Original-scale beliefs still mean
+link-scale constraints and can coexist with outcome-scale beliefs. Entered
+values, expressions and scale labels are retained unchanged.
+
+Selected priors remain normal or fixed-df Student's t distributions over the
+link-scale intercept. Monotone probability inequalities map to link thresholds
+before distribution-independent consistency checks. Outcome means and SDs
+are expectations and variances of the transformed variable. Lognormal moments
+and modes use analytic formulas; logit-normal means/SDs use adaptive quadrature,
+and its global mode is located using the full density Jacobian. Multiple tied
+global modes are reported as unsupported. Transformed-density plots also use
+the Jacobian; numerically unrepresentable boundary points are omitted with a
+warning, not displayed as finite endpoint densities.
+
+Logit-Student's t has finite bounded moments, but its density diverges at both
+probability boundaries: an interior global mode belief is unsupported.
+Exponentiated Student's t has no finite positive moments and no attained
+positive global mode; only its probability constraints are currently supported.
+Rejected alternatives retain these explanations. An unsupported candidate never
+replaces the selected prior silently.
+
+The existing analytic location/scale fitter handles link constraints and
+transformed inequalities. Nonlinear outcome moments/modes use a multistart
+search over link location and log-scale, followed by checks of every belief on
+its entered scale. A failed search means no acceptable candidate was found,
+not proof of mathematical contradiction. Numerical evaluation has a separate
+absolute error budget of `1e-8` (mode roots use `1e-12`). Probability mean/SD
+belief tolerances below `1e-7`, and mode tolerances below `1e-10`, are currently
+unsupported. Analytic lognormal moments do not require that quadrature limit.
+Diagnostics show achieved values, numerical policy and convergence information.
+
+For one unique nonlinear belief, the backend reference SD is held fixed while
+location is fitted, or reference location is held fixed for an SD belief.
+For a single logistic mode belief only, reference link SD is capped at 1 to
+ensure unimodality; diagnostics disclose this extra anchoring policy. Exact
+redundant beliefs share that anchoring. More general rank-deficient nonlinear
+constraint combinations currently remain unresolved with an informative message;
+add an SD or informative quantile. This is a current numerical limitation.
+
+Probability means/modes must be inside `(0,1)` and SDs inside `(0,.5)`;
+probability inequality thresholds may include 0 and 1. Expected-count mean,
+mode and SD targets must be positive; count inequality thresholds may be zero.
+Impossible boundary probabilities are marked contradictory with belief numbers;
+valid boundary tautologies do not force an artificial link distribution.
+
+No data, response, formula or intercept-centering transformation is introduced.
+Export and fitting use the selected link prior; predictive checks still produce
+expected outcomes and simulated observations through the original likelihood.
+No new families, outcome-scale slopes, or Stan sampler are added.
+
+The one-dimensional reference search currently covers link location `[-50,50]`
+or log-scale `[-10,3]`; extreme targets outside that search may remain
+unresolved. Multiconstraint searches use several starting values and no fixed
+parameter bounds, but still reject nonfinite or numerically unreliable results.
