@@ -64,8 +64,7 @@ intercept are not centered.
 
 Beliefs use exact coefficient names printed by the object, not formula-term
 names. Normal and fixed-df Student's t coefficient/intercept candidates are fitted.
-Residual-scale elicitation, predictive checks, export,
-and posterior fitting are not yet implemented. Unsupported models fail clearly.
+Residual-scale elicitation, export, and posterior fitting are not yet implemented. Unsupported models fail clearly.
 No alternative prior is substituted for an unavailable backend default.
 
 Mean, mode, standard deviation, and threshold probabilities are supported.
@@ -152,3 +151,39 @@ threshold is evaluated; `value` is a placeholder. The result must be a single
 finite real number. Beliefs retain both the resolved numeric threshold for
 fitting and the original comparison for display; later changes to variables do
 not change an existing belief.
+
+### Gaussian prior predictive checking
+
+```r
+set.seed(42)
+checks = check_prior(p, n = 1000)
+plot(checks) + ggplot2::theme_bw()
+plot(checks, type = "expected")
+plot(checks, type = "simulated")
+# New predictor values need no response column:
+# checks = check_prior(p, n = 1000, newdata = predictor_grid)
+```
+
+`parameter_draws` stores draws from the exact selected priors, including the
+centered intercept and residual standard deviation `sigma`. `coefficient_draws`
+transforms that intercept to the original model-matrix coordinates by
+subtracting the dot product of slope draws and the original centering values.
+`expected` contains conditional response means, and `simulated` adds independent
+Gaussian residual draws with the sampled `sigma`. All matrices have simulations
+in rows; response matrices have prediction cases in columns. `X` records the
+prediction design, and `metadata` records priors, centering, family and backend.
+
+By default the original design is used. New data reuse the original formula
+terms, contrasts, factor levels and centering values; missing predictors,
+unknown factor levels, missing values and non-finite designs fail clearly.
+The selected priors stay fixed when new data are supplied. Backend defaults
+may depend on the original observed mean and standard deviation of the outcome;
+no fitted coefficients or posterior distributions are used.
+
+The default plot separates expected responses from individual observations and
+shows medians and central 90% intervals at each prediction row. Row numbers are
+case identifiers, not a continuous predictor axis. `set.seed()` controls all
+sampling. Checks refuse contradictory, unselected, unsupported, improper,
+unsampleable or backend-incompatible prior specifications. Only Gaussian
+identity-link checks are currently implemented; residual-scale elicitation,
+backend export and posterior fitting remain unavailable.
