@@ -14,7 +14,7 @@ belief(
 )
 }
 \arguments{
-\item{expression}{A comparison of value with a numeric constant.}
+\item{expression}{A comparison with value on the left. The threshold on the right is evaluated in the caller's environment and must yield one finite real numeric value. The original comparison is retained.}
 
 \item{probability}{Probability of the comparison.}
 

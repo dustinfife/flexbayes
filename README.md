@@ -144,3 +144,11 @@ which is selected and which is mathematical only. Invalid candidates are not
 drawn. `summary(p, diagnostics = TRUE)` reports acceptance and mathematical ranks.
 Probability contradictions still skip every candidate fit; otherwise a failure
 is reported as `no_supported_fit`, without claiming mathematical impossibility.
+
+Probability thresholds may be variables or numeric expressions evaluated in the
+calling environment, for example `belief(value < lower, probability = .01)` or
+`belief(value < qt(.01, df = 7), probability = .01)`. Only the right-hand
+threshold is evaluated; `value` is a placeholder. The result must be a single
+finite real number. Beliefs retain both the resolved numeric threshold for
+fitting and the original comparison for display; later changes to variables do
+not change an existing belief.

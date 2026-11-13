@@ -17,7 +17,7 @@ test_that("beliefs validate syntax and numeric targets", {
   expect_error(belief(value < 2, probability = 1.1))
   expect_error(belief(sd = 0))
   expect_error(belief(mean = 1, mode = 2))
-  expect_error(belief(value < system("false"), probability = .5))
+  expect_error(belief(value < "invalid", probability = .5))
 })
 
 test_that("normal constraints fit and updates preserve unrelated priors", {

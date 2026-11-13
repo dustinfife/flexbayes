@@ -1,5 +1,7 @@
 #' Describe a prior belief
-#' @param expression A comparison of value with a numeric constant.
+#' @param expression A comparison with value on the left. The threshold on the
+#'   right is evaluated in the caller's environment and must yield one finite
+#'   real numeric value. The original comparison is retained.
 #' @param probability Probability of the comparison.
 #' @param mean,mode,sd Numeric moment or mode target; supply one.
 #' @param tolerance Absolute acceptance tolerance on the target scale.
@@ -11,10 +13,8 @@ belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd =
   supplied = !vapply(targets, is.null, logical(1))
   if (!is.numeric(tolerance) || length(tolerance) != 1L || !is.finite(tolerance) || tolerance <= 0) stop("Positive finite tolerance required.")
   if (!missing(expression)) {
-    if (any(supplied) || !is.call(expr) || length(expr) != 3L || !as.character(expr[[1]]) %in% c("<", ">", "<=", ">=") || !identical(expr[[2]], as.name("value"))) stop("Use value < constant or value > constant.")
-    threshold = expr[[3]]
-    if (is.call(threshold) && length(threshold) == 2L && identical(threshold[[1]], as.name("-")) && is.numeric(threshold[[2]])) threshold = -threshold[[2]]
-    if (!is.numeric(threshold) || length(threshold) != 1 || !is.finite(threshold)) stop("Threshold must be a finite numeric literal.")
+    if (any(supplied) || !is.call(expr) || length(expr) != 3L || !is.symbol(expr[[1]]) || !as.character(expr[[1]]) %in% c("<", ">", "<=", ">=") || !identical(expr[[2]], as.name("value"))) stop("Use value < constant or value > constant.")
+    threshold = prior_resolve_threshold(expr[[3]], parent.frame())
     if (!is.numeric(probability) || length(probability) != 1 || !is.finite(probability) || probability < 0 || probability > 1) stop("Probability must be between zero and one.")
     out = list(type = "probability", target = probability, threshold = threshold, operator = as.character(expr[[1]]), expression = expr, label = paste(deparse(expr), "with probability", probability))
   } else {
@@ -27,6 +27,17 @@ belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd =
   out$tolerance = tolerance
   class(out) = "prior_belief"
   out
+}
+
+prior_resolve_threshold = function(expression, environment) {
+  threshold = tryCatch(eval(expression, envir = environment), error = function(error) {
+    stop("Could not evaluate threshold: ", conditionMessage(error), call. = FALSE)
+  })
+  if (!is.numeric(threshold) || is.complex(threshold) || length(threshold) != 1L ||
+      !is.null(dim(threshold)) || !is.finite(threshold)) {
+    stop("Threshold must evaluate to a single finite numeric value.", call. = FALSE)
+  }
+  threshold
 }
 
 prior_fit_location_scale = function(records, reference, family = "normal") {
