@@ -1,5 +1,7 @@
 test_that("loading does not initialize optional Bayesian backends", {
   skip_if_not_installed("pkgload")
+  skip_if_not_installed("brms")
+  skip_if_not_installed("rstanarm")
   path = normalizePath(system.file(package = "flexbayes"))
   script = tempfile(fileext = ".R")
   on.exit(unlink(script), add = TRUE)
@@ -21,6 +23,19 @@ test_that("loading does not initialize optional Bayesian backends", {
     'data("small_bayes", package = "flexbayes")',
     'stopifnot(is.data.frame(small_bayes))',
     'stopifnot(!any(c("brms", "rstanarm") %in% loadedNamespaces()))',
+    'models = c("marketing_brms", "marketing_stanreg", "small_brms", "small_brms_interaction", "small_stanreg")',
+    'for (name in models) {',
+    '  expected = if (grepl("stanreg", name)) "stanreg" else "brmsfit"',
+    '  stopifnot(inherits(get(name, envir = as.environment("package:flexbayes")), expected))',
+    '  target = new.env()',
+    '  data(list = name, package = "flexbayes", envir = target)',
+    '  stopifnot(inherits(get(name, envir = target), expected))',
+    '}',
+    'target = new.env()',
+    'data(marketing_brms, envir = target)',
+    'stopifnot(inherits(target$marketing_brms, "brmsfit"))',
+    'discovered = data(package = "flexbayes")$results[, "Item"]',
+    'stopifnot(all(models %in% discovered))',
     'cat("LAZY_LOAD_OK\n")'
   ), script)
   output = system2(file.path(R.home("bin"), "Rscript"), c("--vanilla", shQuote(script)), stdout = TRUE, stderr = TRUE)

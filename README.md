@@ -198,3 +198,12 @@ bindings. This keeps `pkgload::load_all()` from deserializing fitted model
 environments and loading optional Bayesian backends during package startup.
 Requesting a fitted dataset can load the namespaces referenced by that saved
 model. Ordinary data frames and package S3 registrations remain unchanged.
+
+Deferred dataset paths are resolved relative to the active package namespace:
+`inst/extdata` during development and `extdata` after installation. They do not
+rely on the working directory or pkgload's interactive `system.file()` shim.
+Both direct access (for example `marketing_brms`) and `data(marketing_brms)`
+work, and `data(package = "flexbayes")` lists every deferred model. One intentional
+difference from eager model loading is that `data()` may create a deferred
+binding: backend initialization happens when the model is actually accessed.
+Dataset names and fitted-model classes are unchanged.
