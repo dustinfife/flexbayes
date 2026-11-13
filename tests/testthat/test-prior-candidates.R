@@ -1,0 +1,95 @@
+test_that("registry validates and evaluates supported distributions", {
+  t = list(distribution = "student_t", location = 2, scale = 3, df = 7)
+  expect_equal(prior_distribution_operation(t, "density", 2), dt(0, 7) / 3)
+  expect_equal(prior_distribution_operation(t, "cdf", 2), .5)
+  expect_equal(prior_distribution_operation(t, "quantile", .9), 2 + 3 * qt(.9, 7))
+  expect_equal(prior_distribution_operation(t, "sd"), 3 * sqrt(7 / 5))
+  expect_equal(prior_distribution_operation(t, "mean"), 2)
+  expect_equal(prior_distribution_operation(t, "mode"), 2)
+  expect_equal(prior_distribution_operation(t, "support"), c(-Inf, Inf))
+  expect_length(prior_distribution_operation(t, "random", 4), 4)
+  t$df = 0
+  expect_error(prior_distribution_operation(t, "density", 0), "positive")
+  t$df = 1
+  expect_true(is.na(prior_distribution_operation(t, "mean")))
+  expect_equal(prior_distribution_operation(t, "sd"), Inf)
+  expect_error(prior_validate_distribution(list(distribution = "normal", mean = 0, sd = -1)))
+  expect_error(prior_validate_distribution(list(distribution = "exponential", rate = NA_real_)))
+})
+
+test_that("both candidate families fit moments with fixed df and stable ranking", {
+  p = prior_example()
+  p = update(p, parameter = "x", belief(mean = 2), belief(sd = 3))
+  a = p$candidates$x$alternatives
+  expect_true(a$normal$valid)
+  expect_true(a$student_t$valid)
+  expect_equal(a$student_t$distribution$df, 7)
+  expect_equal(a$student_t$distribution$scale, 3 * sqrt(5 / 7))
+  expect_equal(c(a$normal$rank, a$student_t$rank), c(1L, 2L))
+  expect_equal(p$selected$x$distribution, "normal")
+  expect_equal(p$candidates$x$mathematical, p$selected$x)
+  expect_true(p$backend$compatible)
+  p = update(p, parameter = "x", remove = 2)
+  expect_true(p$candidates$x$alternatives$student_t$reference_used)
+})
+
+student_beliefs = function(p, parameter) {
+  update(p, parameter = parameter, belief(mean = 0), belief(sd = sqrt(7 / 5)),
+    belief(value < 1, probability = pt(1, 7)))
+}
+
+test_that("t-only candidates select when compatible and preserve other defaults", {
+  p = prior_example()
+  single = identify_priors(y ~ x, p$model$data)
+  t = student_beliefs(single, "x")
+  expect_false(t$candidates$x$alternatives$normal$valid)
+  expect_true(t$candidates$x$alternatives$student_t$valid)
+  expect_equal(t$selected$x$distribution, "student_t")
+  expect_equal(t$selected$x$df, 7)
+  expect_true(t$backend$compatible)
+  expect_equal(t$selected$`(Intercept)`, single$selected$`(Intercept)`)
+  blocked = student_beliefs(p, "x")
+  expect_identical(blocked$candidates$x$status, "backend_incompatible")
+  expect_null(blocked$selected$x)
+  expect_equal(blocked$selected$gb, p$selected$gb)
+  expect_equal(blocked$candidates$x$mathematical$distribution, "student_t")
+  expect_false(blocked$backend$compatible)
+  expect_match(blocked$candidates$x$message, "one slope prior family")
+  # The centered intercept has its own family argument.
+  intercept = student_beliefs(p, "(Intercept)")
+  expect_equal(intercept$selected$`(Intercept)`$distribution, "student_t")
+  expect_true(intercept$backend$compatible)
+})
+
+test_that("candidate plots compare valid densities and remain ggplots", {
+  p = prior_example()
+  p = update(p, parameter = "x", belief(mean = 0), belief(sd = 1))
+  plot = plot(p, parameter = "x")
+  expect_s3_class(plot + ggplot2::theme_bw(), "ggplot")
+  expect_equal(length(unique(plot$data$Candidate)), 2)
+  expect_true(all(is.finite(plot$data$density)))
+  expect_true(any(grepl("selected", plot$data$Candidate)))
+  blocked = student_beliefs(prior_example(), "x")
+  plot = plot(blocked, parameter = "x")
+  expect_match(unique(plot$data$Candidate), "mathematical only")
+  expect_error(plot(blocked), "No selected prior")
+})
+
+test_that("backend choice is separate from mathematical rank", {
+  p = student_beliefs(prior_example(), "x")
+  p = student_beliefs(p, "gb")
+  # Revisit x explicitly, without changing gb behind the user's back.
+  p = update(p, parameter = "x")
+  expect_true(p$backend$compatible)
+  expect_equal(p$selected$x$distribution, "student_t")
+  q = update(p, parameter = "x", remove = 3)
+  expect_equal(q$candidates$x$mathematical$distribution, "normal")
+  expect_equal(q$selected$x$distribution, "student_t")
+  expect_equal(q$candidates$x$rank, 2L)
+  expect_equal(q$selected$gb, p$selected$gb)
+  restored = update(p, parameter = "x", remove = 1:3)
+  expect_identical(restored$candidates$x$status, "backend_incompatible")
+  expect_false(restored$backend$compatible)
+  expect_null(restored$selected$x)
+  expect_equal(restored$selected$gb, p$selected$gb)
+})
