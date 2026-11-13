@@ -11,32 +11,32 @@ small_brms = brms::brm(
   chains = 2, iter = 600, warmup = 300, cores = 2,
   seed = 2323, refresh = 0
 )
-usethis::use_data(small_brms, overwrite = TRUE)
+save(small_brms, file = "inst/extdata/small_brms.rda", compress = "xz")
 
 small_brms_interaction = brms::brm(
   y ~ x * a, data = small_bayes,
   chains = 2, iter = 600, warmup = 300, cores = 2,
   seed = 2324, refresh = 0
 )
-usethis::use_data(small_brms_interaction, overwrite = TRUE)
+save(small_brms_interaction, file = "inst/extdata/small_brms_interaction.rda", compress = "xz")
 
 marketing_brms = brms::brm(
   revenue ~ advertising, data = marketing_bayes,
   chains = 2, iter = 600, warmup = 300, cores = 2,
   seed = 2325, refresh = 0
 )
-usethis::use_data(marketing_brms, overwrite = TRUE)
+save(marketing_brms, file = "inst/extdata/marketing_brms.rda", compress = "xz")
 
 small_stanreg = rstanarm::stan_glm(
   y ~ x + z + a, data = small_bayes,
   chains = 2, iter = 600, warmup = 300, cores = 2,
   seed = 2323, refresh = 0
 )
-usethis::use_data(small_stanreg, overwrite = TRUE)
+save(small_stanreg, file = "inst/extdata/small_stanreg.rda", compress = "xz")
 
 marketing_stanreg = rstanarm::stan_glm(
   revenue ~ advertising, data = marketing_bayes,
   chains = 2, iter = 600, warmup = 300, cores = 2,
   seed = 2325, refresh = 0
 )
-usethis::use_data(marketing_stanreg, overwrite = TRUE)
+save(marketing_stanreg, file = "inst/extdata/marketing_stanreg.rda", compress = "xz")

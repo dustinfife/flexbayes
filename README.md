@@ -187,3 +187,14 @@ sampling. Checks refuse contradictory, unselected, unsupported, improper,
 unsampleable or backend-incompatible prior specifications. Only Gaussian
 identity-link checks are currently implemented; residual-scale elicitation,
 backend export and posterior fitting remain unavailable.
+
+## Loading fitted example datasets
+
+Fitted examples keep their existing dataset names, including
+`data("small_brms", package = "flexbayes")` and
+`data("small_stanreg", package = "flexbayes")`. Their serialized models live
+under `inst/extdata`; the corresponding `data/*.R` scripts create deferred
+bindings. This keeps `pkgload::load_all()` from deserializing fitted model
+environments and loading optional Bayesian backends during package startup.
+Requesting a fitted dataset can load the namespaces referenced by that saved
+model. Ordinary data frames and package S3 registrations remain unchanged.

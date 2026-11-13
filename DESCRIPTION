@@ -14,6 +14,7 @@ Depends:
     flexplot
 Suggests:
     testthat (>= 3.0.0),
+    pkgload,
     brms,
     rstanarm,
     insight,
