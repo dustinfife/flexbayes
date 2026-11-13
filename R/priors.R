@@ -41,6 +41,7 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   defaults$sigma = list(distribution = "exponential", rate = 1 / sy)
   parameters = data.frame(parameter = names(defaults), role = c(ifelse(colnames(X) == "(Intercept)", "centered intercept", "coefficient"), "residual scale"), term = c(attr(X, "assign"), NA_integer_), lower = c(rep(-Inf, ncol(X)), 0), upper = Inf)
   out = list(model = list(formula = formula, data = data, family = family, frame = frame, terms = terms, X = X, contrasts = attr(X, "contrasts"), reference = reference), parameters = parameters, defaults = defaults, selected = defaults, beliefs = stats::setNames(rep(list(list()), length(defaults)), names(defaults)), candidates = stats::setNames(rep(list(list()), length(defaults)), names(defaults)), next_id = 1L, backend = list(package = package, version = version, compatible = TRUE, QR = FALSE, sparse = FALSE, outcome_mean = mean(y), outcome_sd = sy))
+  out$model$standardization = prior_standardization_metadata(out$model)
   class(out) = "flexbayes_priors"
   out
 }
@@ -92,6 +93,14 @@ summary.flexbayes_priors = function(object, diagnostics = FALSE, ...) {
     if (!length(records)) next
     cat("\nBeliefs for ", name, ":\n", sep = "")
     for (i in seq_along(records)) prior_console_line(paste0("  ", i, ". ", records[[i]]$label))
+    if (diagnostics) {
+      for (i in seq_along(records)) {
+        r = records[[i]]
+        if (!identical(r$scale, "standardized")) next
+        equivalent = if (r$type == "probability") paste0("value ", r$operator, " ", format(r$threshold, digits = 6), ", probability = ", r$target) else paste(r$type, "=", format(r$target, digits = 6))
+        prior_console_line(paste0("Belief ", i, ": SD(y)/SD(x) = ", format(r$standardization_factor, digits = 6), "; original-scale equivalent: ", equivalent))
+      }
+    }
     candidate = object$candidates[[name]]
     if (!is.null(candidate$message)) prior_console_line(paste0("Warning (", name, "): ", candidate$message))
     if (diagnostics && identical(candidate$status, "contradictory")) {
@@ -129,10 +138,17 @@ summary.flexbayes_priors = function(object, diagnostics = FALSE, ...) {
 #' Plot selected and candidate prior densities
 #' @param x Prior specification.
 #' @param parameter Optional parameter name. When supplied, compare acceptable candidates.
+#' @param scale Plot in original or standardized slope units. Standardized plots require one supported parameter.
 #' @param ... Reserved.
 #' @return A ggplot object.
 #' @export
-plot.flexbayes_priors = function(x, parameter = NULL, ...) {
+plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
+  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized")) stop("scale must be original or standardized.")
+  factor = 1
+  if (scale == "standardized") {
+    if (is.null(parameter) || length(parameter) != 1L) stop("Select one parameter for a standardized plot.")
+    factor = prior_standardization_factor(x, parameter)
+  }
   names = if (is.null(parameter)) names(x$selected) else parameter
   if (!length(names) || any(!names %in% names(x$selected))) stop("Unknown parameter.")
   rows = list()
@@ -150,9 +166,9 @@ plot.flexbayes_priors = function(x, parameter = NULL, ...) {
       grid = prior_distribution_operation(p, "quantile", seq(.001, .999, length.out = 501))
       density = prior_distribution_operation(p, "density", grid)
       selected = identical(p, x$selected[[name]])
-      rows[[length(rows) + 1L]] = data.frame(value = grid, density = density, parameter = name,
+      rows[[length(rows) + 1L]] = data.frame(value = grid / factor, density = density * factor, parameter = name,
         Candidate = paste0(label, if (selected) " (selected)" else " (mathematical only)"))
     }
   }
-  ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = "Parameter value", y = "Prior density")
+  ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else "Parameter value", y = "Prior density")
 }

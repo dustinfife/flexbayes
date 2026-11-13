@@ -244,3 +244,35 @@ GLM export are not implemented.
 Routine tests intercept backend preprocessing and mock the sampling boundary.
 Set `FLEXBAYES_RUN_STAN=true` when running the export tests to enable the small
 Gaussian posterior and prior-only sampling integration test.
+
+### Standardized slope beliefs
+
+For a plain numeric Gaussian identity-link slope, use
+`belief(mode = .5, scale = "standardized")` or
+`belief(value < 1, probability = .95, scale = "standardized")`.
+The default remains `scale = "original"`. Fully standardized slopes are
+`beta_star = beta * sd(x) / sd(y)`, defined relative to the observed estimation
+sample using R's sample SD convention. flexbayes converts constraints with
+`beta = beta_star * sd(y) / sd(x)` before consistency checking and fitting.
+Mean, mode and SD targets and their absolute tolerances are multiplied by that
+positive factor. Probability thresholds are multiplied, but probability targets
+and probability tolerances are unchanged. Original and standardized beliefs
+can be combined and removed by the usual displayed indices.
+
+Summaries label standardized inputs, and `summary(p, diagnostics = TRUE)` shows
+the conversion factor and original-scale equivalents. Internal targets remain
+in original units; each standardized belief also retains its entered target,
+threshold, tolerance and scale. `plot(p, parameter = "x", scale = "standardized")`
+compares candidate densities on the standardized scale, including the density
+Jacobian. Standardized plotting requires one eligible parameter.
+
+Only untransformed numeric slopes are supported. Factors, centered intercepts,
+residual scales, transformed/polynomial terms, and slopes involved in interactions
+are rejected. Other supported model terms may coexist with a plain numeric slope.
+Predictor and outcome SDs must be positive and finite. The current model
+identification policy rejects missing values rather than silently removing rows.
+Model data changes after standardization are rejected during updates, predictive
+checking and export; identify priors again to establish new reference SDs.
+The actual data, formula, centered-intercept definition, exported priors and
+predictions retain their original units. No additional backend is loaded for
+standardized conversion or plotting.

@@ -5,9 +5,11 @@
 #' @param probability Probability of the comparison.
 #' @param mean,mode,sd Numeric moment or mode target; supply one.
 #' @param tolerance Absolute acceptance tolerance on the target scale.
+#' @param scale Units of the belief: original (default) or standardized slope.
 #' @return A prior_belief record.
 #' @export
-belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd = NULL, tolerance = 1e-6) {
+belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd = NULL, tolerance = 1e-6, scale = "original") {
+  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized")) stop("scale must be original or standardized.")
   expr = substitute(expression)
   targets = list(mean = mean, mode = mode, sd = sd)
   supplied = !vapply(targets, is.null, logical(1))
@@ -24,6 +26,8 @@ belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd =
     if (!is.numeric(target) || length(target) != 1 || !is.finite(target) || (type == "sd" && target <= 0)) stop("Invalid belief target.")
     out = list(type = type, target = target, label = paste(type, "=", target))
   }
+  out$scale = scale
+  if (scale == "standardized") out$label = paste0(out$label, " [standardized]")
   out$tolerance = tolerance
   class(out) = "prior_belief"
   out
@@ -91,12 +95,14 @@ prior_fit_normal = function(records, reference) prior_fit_location_scale(records
 update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
   if (length(parameter) != 1 || !parameter %in% names(object$beliefs)) stop("Unknown parameter.")
   if (parameter == "sigma") stop("Residual-scale elicitation is not supported yet; backend default retained.")
+  prior_validate_standardized_beliefs(object)
   additions = list(...)
   if (any(!vapply(additions, inherits, logical(1), "prior_belief"))) stop("All additions must be belief objects.")
   records = object$beliefs[[parameter]]
   if (!is.numeric(remove) || anyNA(remove) || any(!is.finite(remove)) || any(remove != floor(remove)) || any(remove < 1 | remove > length(records)) || anyDuplicated(remove)) stop("Invalid removal numbers.")
   if (length(remove)) records = records[-remove]
   for (r in additions) {
+    r = prior_convert_belief(r, object, parameter)
     r$id = object$next_id
     object$next_id = object$next_id + 1L
     records = c(records, list(r))

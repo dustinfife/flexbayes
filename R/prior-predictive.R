@@ -39,6 +39,7 @@ check_prior = function(object, n = 1000, newdata = NULL) {
 }
 
 prior_predictive_validate = function(object) {
+  prior_validate_standardized_beliefs(object)
   required = c(colnames(object$model$X), "sigma")
   if (!all(required %in% names(object$selected))) stop("Required prior is missing.")
   for (name in required) {

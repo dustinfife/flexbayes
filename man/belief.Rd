@@ -10,17 +10,22 @@ belief(
   mean = NULL,
   mode = NULL,
   sd = NULL,
-  tolerance = 1e-06
+  tolerance = 1e-06,
+  scale = "original"
 )
 }
 \arguments{
-\item{expression}{A comparison with value on the left. The threshold on the right is evaluated in the caller's environment and must yield one finite real numeric value. The original comparison is retained.}
+\item{expression}{A comparison with value on the left. The threshold on the
+right is evaluated in the caller's environment and must yield one finite
+real numeric value. The original comparison is retained.}
 
 \item{probability}{Probability of the comparison.}
 
 \item{mean, mode, sd}{Numeric moment or mode target; supply one.}
 
 \item{tolerance}{Absolute acceptance tolerance on the target scale.}
+
+\item{scale}{Units of the belief: original (default) or standardized slope.}
 }
 \value{
 A prior_belief record.

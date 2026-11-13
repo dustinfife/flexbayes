@@ -4,12 +4,14 @@
 \alias{plot.flexbayes_priors}
 \title{Plot selected and candidate prior densities}
 \usage{
-\method{plot}{flexbayes_priors}(x, parameter = NULL, ...)
+\method{plot}{flexbayes_priors}(x, parameter = NULL, scale = "original", ...)
 }
 \arguments{
 \item{x}{Prior specification.}
 
 \item{parameter}{Optional parameter name. When supplied, compare acceptable candidates.}
+
+\item{scale}{Plot in original or standardized slope units. Standardized plots require one supported parameter.}
 
 \item{...}{Reserved.}
 }
