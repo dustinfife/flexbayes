@@ -64,7 +64,7 @@ intercept are not centered.
 
 Beliefs use exact coefficient names printed by the object, not formula-term
 names. Normal and fixed-df Student's t coefficient/intercept candidates are fitted.
-Residual-scale elicitation, export, and posterior fitting are not yet implemented. Unsupported models fail clearly.
+Residual-scale elicitation is not yet implemented. Unsupported models fail clearly.
 No alternative prior is substituted for an unavailable backend default.
 
 Mean, mode, standard deviation, and threshold probabilities are supported.
@@ -136,7 +136,7 @@ If no complete combination exists, blocked parameters remain
 `backend_incompatible` with empty selections and overall compatibility false.
 Defaults are retained even in this state. Blocked parameters recover
 automatically as soon as subsequent revisions allow a compatible combination.
-The centered intercept is selected independently. No fitting/export API is implemented yet.
+The centered intercept is selected independently.
 
 `plot(p, parameter = "x")` compares acceptable candidate densities and labels
 which is selected and which is mathematical only. Invalid candidates are not
@@ -185,8 +185,7 @@ shows medians and central 90% intervals at each prediction row. Row numbers are
 case identifiers, not a continuous predictor axis. `set.seed()` controls all
 sampling. Checks refuse contradictory, unselected, unsupported, improper,
 unsampleable or backend-incompatible prior specifications. Only Gaussian
-identity-link checks are currently implemented; residual-scale elicitation,
-backend export and posterior fitting remain unavailable.
+identity-link checks are currently implemented; residual-scale elicitation remains unavailable.
 
 ## Loading fitted example datasets
 
@@ -207,3 +206,41 @@ work, and `data(package = "flexbayes")` lists every deferred model. One intentio
 difference from eager model loading is that `data()` may create a deferred
 binding: backend initialization happens when the model is actually accessed.
 Dataset names and fitted-model classes are unchanged.
+
+### Export and fitting (Gaussian rstanarm)
+
+```r
+arguments = as_rstanarm(p)  # inspect before fitting
+model = fit(p, chains = 4, iter = 2000, cores = 4, seed = 42)
+# model is a native stanreg, compatible with existing flexbayes methods
+```
+
+`as_rstanarm()` returns a named `stan_glm()` argument list: `formula`, `data`,
+`family`, `contrasts`, `na.action`, `prior`, `prior_intercept`, `prior_aux`,
+`QR` and `sparse`. Normal coefficients export their means and SDs; Student's t
+coefficients export location, scale (not SD), and df in design-column order.
+The centered-intercept prior is exported separately without shifting its
+location. The exponential sigma prior exports its rate. All priors, including
+resolved backend defaults, set `autoscale = FALSE`; `QR` and `sparse` are false.
+Absent slope/intercept blocks use NULL because there are no such parameters.
+
+Export validates the complete selected model and requires matching rstanarm
+2.32.2. It rejects contradictory, unresolved, improper, unsupported or
+incompatible selections. It also rebuilds the design and response to detect
+changed data, formula evaluation or contrasts. Keep variables referenced by
+formula transformations unchanged between identification and fitting.
+No alternatives or backend defaults are silently substituted.
+
+`fit()` accepts uniquely named `chains`, `iter`, `warmup`, `thin`, `seed`,
+`cores`, `refresh`, `control`, `init`, `save_warmup`, `sample_file`,
+`diagnostic_file`, `verbose`, `algorithm`, `adapt_delta`, `mean_PPD` and
+`prior_PD`. The last explicitly requests prior-only sampling when TRUE.
+Model, prior, contrasts, weights, subset, offset, missing-value policy, QR and
+sparse settings cannot be overridden. Unrecognized names and partial names
+are rejected. Export and fitting load rstanarm on demand; package startup
+remains lazy. Only Gaussian identity-link regression is supported; brms and
+GLM export are not implemented.
+
+Routine tests intercept backend preprocessing and mock the sampling boundary.
+Set `FLEXBAYES_RUN_STAN=true` when running the export tests to enable the small
+Gaussian posterior and prior-only sampling integration test.
