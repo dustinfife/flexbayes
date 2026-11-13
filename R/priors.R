@@ -1,12 +1,13 @@
-#' Identify Gaussian regression priors
+#' Identify regression priors
 #'
 #' Defaults are resolved for rstanarm 2.32.2, dense design and QR = FALSE.
 #' The intercept is at the column means of the model matrix, including
-#' contrast and interaction columns. Defaults depend on mean(y) and sd(y).
+#' contrast and interaction columns. Gaussian defaults depend on mean(y) and
+#' sd(y); GLM defaults use the link scale and predictor SDs.
 #' No posterior fitting is performed.
 #' @param formula Model formula.
 #' @param data Data frame.
-#' @param family Gaussian identity family.
+#' @param family Gaussian identity, binomial logit or Poisson log family.
 #' @param package Backend name.
 #' @return A flexbayes_priors object.
 #' @export
@@ -15,7 +16,7 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   if (!requireNamespace("rstanarm", quietly = TRUE)) stop("Install rstanarm to resolve defaults.")
   version = as.character(utils::packageVersion("rstanarm"))
   if (version != "2.32.2") stop("Default resolution is verified only for rstanarm 2.32.2; installed: ", version)
-  if (!is.list(family) || family$family != "gaussian" || family$link != "identity") stop("Only Gaussian identity models are supported.")
+  prior_validate_family(family)
   if (!inherits(formula, "formula") || length(formula) != 3L) stop("Supply a two-sided formula.")
   if (any(all.names(formula) %in% c("|", "||"))) stop("Mixed models are not supported.")
   frame = stats::model.frame(formula, data, na.action = stats::na.fail)
@@ -25,22 +26,18 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   y = stats::model.response(frame)
   if (!is.numeric(y) || is.matrix(y) || any(!is.finite(y)) || nrow(X) < 2L || any(!is.finite(X))) stop("Finite numeric response and design required.")
   if (!ncol(X) || qr(X)$rank != ncol(X)) stop("A nonempty full-rank design is required.")
+  prior_validate_response(y, family)
   sy = stats::sd(y)
-  if (!is.finite(sy) || sy <= 0) stop("Backend default scaling requires positive sd(y).")
   intercept = attr(terms, "intercept") == 1L
   slopes = setdiff(colnames(X), "(Intercept)")
   reference = if (intercept) colMeans(X[, slopes, drop = FALSE]) else stats::setNames(rep(0, length(slopes)), slopes)
-  defaults = list()
-  for (name in colnames(X)) {
-    predictor_scale = if (length(unique(X[, name])) == 1L) 1 else stats::sd(X[, name])
-    scale = if (name == "(Intercept)") 2.5 * sy else max(1e-12, 2.5 * sy / predictor_scale)
-    scale = min(.Machine$double.xmax, scale)
-    defaults[[name]] = list(distribution = "normal", mean = if (name == "(Intercept)") mean(y) else 0, sd = scale)
-  }
-  if ("sigma" %in% colnames(X)) stop("Predictor name sigma conflicts with the residual scale parameter.")
-  defaults$sigma = list(distribution = "exponential", rate = 1 / sy)
-  parameters = data.frame(parameter = names(defaults), role = c(ifelse(colnames(X) == "(Intercept)", "centered intercept", "coefficient"), "residual scale"), term = c(attr(X, "assign"), NA_integer_), lower = c(rep(-Inf, ncol(X)), 0), upper = Inf)
+  if (family$family == "gaussian" && "sigma" %in% colnames(X)) stop("Predictor name sigma conflicts with the residual scale parameter.")
+  defaults = prior_rstanarm_defaults(X, y, family)
+  parameters = data.frame(parameter = names(defaults), role = c(ifelse(colnames(X) == "(Intercept)", "centered intercept", "coefficient"), if (family$family == "gaussian") "residual scale"), term = c(attr(X, "assign"), if (family$family == "gaussian") NA_integer_), lower = c(rep(-Inf, ncol(X)), if (family$family == "gaussian") 0), upper = Inf)
   out = list(model = list(formula = formula, data = data, family = family, frame = frame, terms = terms, X = X, contrasts = attr(X, "contrasts"), reference = reference), parameters = parameters, defaults = defaults, selected = defaults, beliefs = stats::setNames(rep(list(list()), length(defaults)), names(defaults)), candidates = stats::setNames(rep(list(list()), length(defaults)), names(defaults)), next_id = 1L, backend = list(package = package, version = version, compatible = TRUE, QR = FALSE, sparse = FALSE, outcome_mean = mean(y), outcome_sd = sy))
+  if (family$family != "gaussian") {
+    out$parameters$scale = if (family$family == "binomial") "log-odds" else "log-rate"
+  }
   out$model$standardization = prior_standardization_metadata(out$model)
   class(out) = "flexbayes_priors"
   out
@@ -133,7 +130,7 @@ print.summary.flexbayes_priors = function(x, ...) {
     }
   }
   cat("\n")
-  prior_console_line("Backend defaults use observed mean(y) and sd(y).")
+  prior_console_line(prior_default_description(object))
   if ("(Intercept)" %in% names(object$selected)) {
     prior_console_line("Centered intercept reference: model-matrix column means (including contrast and interaction columns).")
     reference = object$model$reference
@@ -177,5 +174,5 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
         Candidate = paste0(label, if (selected) " (selected)" else " (mathematical only)"))
     }
   }
-  ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else "Parameter value", y = "Prior density")
+  ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else if (x$model$family$family == "binomial") "Coefficient (log-odds)" else if (x$model$family$family == "poisson") "Coefficient (log-rate)" else "Parameter value", y = "Prior density")
 }

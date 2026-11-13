@@ -53,7 +53,7 @@ test_that("probability fitting and default reference are explicit", {
 
 test_that("unsupported models fail clearly", {
   p = prior_example()
-  expect_error(identify_priors(y ~ x, p$model$data, family = binomial()), "Gaussian")
+  expect_error(identify_priors(y ~ x, p$model$data, family = binomial("probit")), "Supported families")
   expect_error(identify_priors(y ~ x + I(2*x), p$model$data), "full-rank")
   expect_error(update(p, parameter = "sigma", belief(mean = 2)), "not supported")
   q = identify_priors(y ~ 0 + x, p$model$data)

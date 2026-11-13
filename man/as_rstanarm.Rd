@@ -2,7 +2,7 @@
 % Please edit documentation in R/prior-backend-rstanarm.R
 \name{as_rstanarm}
 \alias{as_rstanarm}
-\title{Export a Gaussian prior specification to rstanarm}
+\title{Export a prior specification to rstanarm}
 \usage{
 as_rstanarm(object)
 }
@@ -12,9 +12,10 @@ as_rstanarm(object)
 \value{
 A named argument list for rstanarm::stan_glm, containing formula,
 data, family, contrasts, na.action, prior, prior_intercept, prior_aux,
-QR and sparse. All resolved priors disable autoscaling. The intercept
+QR and sparse. prior_aux is omitted for binomial/Poisson models, which
+have no auxiliary parameter. All resolved priors disable autoscaling. The intercept
 prior applies at the original model-matrix column means.
 }
 \description{
-Export a Gaussian prior specification to rstanarm
+Export a prior specification to rstanarm
 }

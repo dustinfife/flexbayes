@@ -1,5 +1,6 @@
 # Factors convert standardized slopes into original coefficient units.
 prior_standardization_metadata = function(model) {
+  if (model$family$family != "gaussian") return(list())
   result = list()
   terms = model$terms
   factors = attr(terms, "factors")
@@ -26,6 +27,7 @@ prior_standardization_metadata = function(model) {
 }
 
 prior_standardization_factor = function(object, parameter) {
+  if (!prior_has_sigma(object)) stop("Gaussian-style full standardization is not defined for these GLMs; specify beliefs on the linear predictor scale.")
   info = object$model$standardization[[parameter]]
   if (is.null(info)) stop("Standardized beliefs require an untransformed numeric slope without interactions; unsupported parameter: ", parameter)
   if (!is.finite(info$predictor_sd) || info$predictor_sd <= 0 ||

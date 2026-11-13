@@ -2,7 +2,7 @@
 % Please edit documentation in R/priors.R
 \name{identify_priors}
 \alias{identify_priors}
-\title{Identify Gaussian regression priors}
+\title{Identify regression priors}
 \usage{
 identify_priors(
   formula,
@@ -16,7 +16,7 @@ identify_priors(
 
 \item{data}{Data frame.}
 
-\item{family}{Gaussian identity family.}
+\item{family}{Gaussian identity, binomial logit or Poisson log family.}
 
 \item{package}{Backend name.}
 }
@@ -26,6 +26,7 @@ A flexbayes_priors object.
 \description{
 Defaults are resolved for rstanarm 2.32.2, dense design and QR = FALSE.
 The intercept is at the column means of the model matrix, including
-contrast and interaction columns. Defaults depend on mean(y) and sd(y).
+contrast and interaction columns. Gaussian defaults depend on mean(y) and
+sd(y); GLM defaults use the link scale and predictor SDs.
 No posterior fitting is performed.
 }

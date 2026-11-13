@@ -1,20 +1,25 @@
-#' Export a Gaussian prior specification to rstanarm
+#' Export a prior specification to rstanarm
 #' @param object A flexbayes_priors object.
 #' @return A named argument list for rstanarm::stan_glm, containing formula,
 #'   data, family, contrasts, na.action, prior, prior_intercept, prior_aux,
-#'   QR and sparse. All resolved priors disable autoscaling. The intercept
+#'   QR and sparse. prior_aux is omitted for binomial/Poisson models, which
+#'   have no auxiliary parameter. All resolved priors disable autoscaling. The intercept
 #'   prior applies at the original model-matrix column means.
 #' @export
 as_rstanarm = function(object) {
   prior_rstanarm_validate(object)
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
-  list(formula = object$model$formula, data = object$model$data,
+  arguments = list(formula = object$model$formula, data = object$model$data,
     family = object$model$family, contrasts = object$model$contrasts,
     na.action = stats::na.fail,
     prior = prior_rstanarm_coefficients(object$selected[slopes]),
     prior_intercept = if ("(Intercept)" %in% colnames(object$model$X)) prior_rstanarm_coefficients(object$selected["(Intercept)"]) else NULL,
-    prior_aux = rstanarm::exponential(rate = object$selected$sigma$rate, autoscale = FALSE),
+    prior_aux = if (prior_has_sigma(object)) rstanarm::exponential(rate = object$selected$sigma$rate, autoscale = FALSE) else NULL,
     QR = FALSE, sparse = FALSE)
+  # No auxiliary parameter exists for these GLMs. Omit the argument: an
+  # explicit NULL is rejected by rstanarm prior-only mode even for GLMs.
+  if (!prior_has_sigma(object)) arguments$prior_aux = NULL
+  arguments
 }
 
 prior_rstanarm_validate = function(object) {
@@ -23,7 +28,7 @@ prior_rstanarm_validate = function(object) {
   if (!requireNamespace("rstanarm", quietly = TRUE)) stop("Install rstanarm to export priors.")
   version = as.character(utils::packageVersion("rstanarm"))
   if (version != "2.32.2" || object$backend$version != version) stop("Faithful export is verified only for matching rstanarm 2.32.2 specifications.")
-  if (object$model$family$family != "gaussian" || object$model$family$link != "identity") stop("Only Gaussian identity models can be exported.")
+  prior_validate_family(object$model$family)
   blocked = names(Filter(function(c) identical(c$status, "backend_incompatible"), object$candidates))
   if (length(blocked)) stop("Incompatible parameters: ", paste(blocked, collapse = ", "), ". rstanarm requires one slope prior family across the model.")
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
@@ -39,7 +44,7 @@ prior_rstanarm_validate = function(object) {
     tolerances = vapply(records, `[[`, numeric(1), "tolerance")
     if (any(!is.finite(achieved)) || any(abs(achieved - targets) > tolerances)) stop("Selected prior does not satisfy recorded beliefs for ", name, ".")
   }
-  if (object$selected$sigma$distribution != "exponential") stop("Only exponential residual-scale priors can currently be exported faithfully.")
+  if (prior_has_sigma(object) && object$selected$sigma$distribution != "exponential") stop("Only exponential residual-scale priors can currently be exported faithfully.")
   if (!identical(object$backend$QR, FALSE) || !identical(object$backend$sparse, FALSE)) stop("Export requires QR = FALSE and sparse = FALSE.")
   frame = stats::model.frame(object$model$formula, object$model$data, na.action = stats::na.fail)
   X = stats::model.matrix(attr(frame, "terms"), frame, contrasts.arg = object$model$contrasts)
@@ -67,4 +72,19 @@ prior_rstanarm_coefficients = function(priors) {
 
 prior_rstanarm_fit = function(arguments) {
   do.call(rstanarm::stan_glm, arguments)
+}
+
+# Effective defaults verified against stan_glm.fit in rstanarm 2.32.2.
+prior_rstanarm_defaults = function(X, y, family) {
+  gaussian = family$family == "gaussian"
+  sy = if (gaussian) stats::sd(y) else 1
+  defaults = list()
+  for (name in colnames(X)) {
+    sx = if (length(unique(X[, name])) == 1L) 1 else stats::sd(X[, name])
+    scale = if (name == "(Intercept)") 2.5 * sy else max(1e-12, 2.5 * sy / sx)
+    defaults[[name]] = list(distribution = "normal", mean = if (gaussian && name == "(Intercept)") mean(y) else 0,
+      sd = min(.Machine$double.xmax, scale))
+  }
+  if (gaussian) defaults$sigma = list(distribution = "exponential", rate = 1 / sy)
+  defaults
 }

@@ -1,20 +1,22 @@
-#' Simulate Gaussian prior predictive responses
+#' Simulate prior predictive responses
 #'
 #' Uses selected priors without posterior fitting. Backend defaults may depend
 #' on observed response summaries; their resolved values are kept fixed even
 #' with newdata. Parameter draws retain the centered intercept, while
-#' coefficient_draws contains the equivalent uncentered intercept.
+#' coefficient_draws contains the equivalent uncentered intercept. Expected
+#' responses use the identity, logistic, or exponential inverse link. Poisson
+#' simulation rejects nonfinite rates or rates above 1e8.
 #' @param object A flexbayes_priors object.
 #' @param n Number of simulations.
 #' @param newdata Optional predictor data frame; no response is required.
 #' @return A flexbayes_prior_predictive object with draws-by-observations
 #'   matrices expected and simulated, parameter_draws, coefficient_draws,
-#'   the prediction design matrix, and metadata.
+#'   the linear_predictor and prediction design matrix, and metadata.
 #' @export
 check_prior = function(object, n = 1000, newdata = NULL) {
   if (!inherits(object, "flexbayes_priors")) stop("Supply a flexbayes_priors object.")
   if (!is.numeric(n) || length(n) != 1L || !is.finite(n) || n < 1 || n != floor(n) || n > .Machine$integer.max) stop("n must be a positive integer.")
-  if (object$model$family$family != "gaussian" || object$model$family$link != "identity") stop("Only Gaussian identity prior predictive checks are supported.")
+  prior_validate_family(object$model$family)
   prior_predictive_validate(object)
   X = prior_prediction_matrix(object, newdata)
   draws = prior_sample_parameters(object, n)
@@ -24,23 +26,25 @@ check_prior = function(object, n = 1000, newdata = NULL) {
     coefficients[, "(Intercept)"] = draws[, "(Intercept)"] -
       as.vector(draws[, slopes, drop = FALSE] %*% object$model$reference[slopes])
   }
-  expected = coefficients %*% t(X)
-  simulated = prior_simulate_gaussian(expected, draws[, "sigma"])
+  linear = coefficients %*% t(X)
+  response = prior_simulate_response(linear, draws, object$model$family)
+  expected = response$expected
+  simulated = response$simulated
   if (any(!is.finite(expected)) || any(!is.finite(simulated))) stop("Non-finite prior predictions; selected priors or predictor values exceed numerical limits.")
   result = list(parameter_draws = draws, coefficient_draws = coefficients,
-    expected = expected, simulated = simulated, X = X,
+    expected = expected, simulated = simulated, linear_predictor = linear, X = X,
     metadata = list(n = n, observations = nrow(X), family = object$model$family,
       formula = object$model$formula, reference = object$model$reference,
       priors = object$selected, backend = object$backend,
       newdata = !is.null(newdata),
-      default_scaling = "Backend defaults resolved from original mean(y), sd(y), and design; no posterior conditioning."))
+      default_scaling = prior_default_description(object)))
   class(result) = "flexbayes_prior_predictive"
   result
 }
 
 prior_predictive_validate = function(object) {
   prior_validate_standardized_beliefs(object)
-  required = c(colnames(object$model$X), "sigma")
+  required = prior_required_parameters(object)
   if (!all(required %in% names(object$selected))) stop("Required prior is missing.")
   for (name in required) {
     status = object$candidates[[name]]$status
@@ -52,7 +56,7 @@ prior_predictive_validate = function(object) {
     })
     entry = prior_distribution_registry()[[prior$distribution]]
     if (!is.function(entry$random)) stop("Prior cannot be sampled: ", name)
-    if (name == "sigma" && entry$support[1] < 0) stop("Residual-scale prior must have positive support.")
+    if (name == "sigma" && prior_has_sigma(object) && entry$support[1] < 0) stop("Residual-scale prior must have positive support.")
   }
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
   families = unique(vapply(object$selected[slopes], `[[`, character(1), "distribution"))
@@ -77,7 +81,7 @@ prior_prediction_matrix = function(object, newdata) {
 }
 
 prior_sample_parameters = function(object, n) {
-  required = c(colnames(object$model$X), "sigma")
+  required = prior_required_parameters(object)
   draws = matrix(NA_real_, nrow = n, ncol = length(required), dimnames = list(NULL, required))
   for (name in required) {
     values = tryCatch(prior_distribution_operation(object$selected[[name]], "random", n),
@@ -85,7 +89,7 @@ prior_sample_parameters = function(object, n) {
     if (length(values) != n || any(!is.finite(values))) stop("Non-finite or invalid sampled values for ", name)
     draws[, name] = values
   }
-  if (any(draws[, "sigma"] <= 0)) stop("Residual-scale draws must be positive.")
+  if (prior_has_sigma(object) && any(draws[, "sigma"] <= 0)) stop("Residual-scale draws must be positive.")
   draws
 }
 
@@ -116,5 +120,5 @@ plot.flexbayes_prior_predictive = function(x, type = c("both", "expected", "simu
   ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = row, y = median)) +
     ggplot2::geom_linerange(ggplot2::aes(ymin = lower, ymax = upper), alpha = .5) +
     ggplot2::geom_point() + ggplot2::facet_wrap(~response) +
-    ggplot2::labs(x = "Prediction row", y = "Response", subtitle = "Prior predictive medians and central 90% intervals")
+    ggplot2::labs(x = "Prediction row", y = switch(x$metadata$family$family, binomial = "Probability / binary response", poisson = "Expected count / count", "Response"), subtitle = "Prior predictive medians and central 90% intervals")
 }

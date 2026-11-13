@@ -94,7 +94,7 @@ prior_fit_normal = function(records, reference) prior_fit_location_scale(records
 #' @export
 update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
   if (length(parameter) != 1 || !parameter %in% names(object$beliefs)) stop("Unknown parameter.")
-  if (parameter == "sigma") stop("Residual-scale elicitation is not supported yet; backend default retained.")
+  if (parameter == "sigma" && prior_has_sigma(object)) stop("Residual-scale elicitation is not supported yet; backend default retained.")
   prior_validate_standardized_beliefs(object)
   additions = list(...)
   if (any(!vapply(additions, inherits, logical(1), "prior_belief"))) stop("All additions must be belief objects.")

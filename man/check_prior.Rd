@@ -2,7 +2,7 @@
 % Please edit documentation in R/prior-predictive.R
 \name{check_prior}
 \alias{check_prior}
-\title{Simulate Gaussian prior predictive responses}
+\title{Simulate prior predictive responses}
 \usage{
 check_prior(object, n = 1000, newdata = NULL)
 }
@@ -16,11 +16,13 @@ check_prior(object, n = 1000, newdata = NULL)
 \value{
 A flexbayes_prior_predictive object with draws-by-observations
 matrices expected and simulated, parameter_draws, coefficient_draws,
-the prediction design matrix, and metadata.
+the linear_predictor and prediction design matrix, and metadata.
 }
 \description{
 Uses selected priors without posterior fitting. Backend defaults may depend
 on observed response summaries; their resolved values are kept fixed even
 with newdata. Parameter draws retain the centered intercept, while
-coefficient_draws contains the equivalent uncentered intercept.
+coefficient_draws contains the equivalent uncentered intercept. Expected
+responses use the identity, logistic, or exponential inverse link. Poisson
+simulation rejects nonfinite rates or rates above 1e8.
 }

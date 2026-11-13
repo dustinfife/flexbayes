@@ -184,8 +184,7 @@ The default plot separates expected responses from individual observations and
 shows medians and central 90% intervals at each prediction row. Row numbers are
 case identifiers, not a continuous predictor axis. `set.seed()` controls all
 sampling. Checks refuse contradictory, unselected, unsupported, improper,
-unsampleable or backend-incompatible prior specifications. Only Gaussian
-identity-link checks are currently implemented; residual-scale elicitation remains unavailable.
+unsampleable or backend-incompatible prior specifications. Gaussian identity, binary logit and Poisson log checks are implemented; residual-scale elicitation remains unavailable.
 
 ## Loading fitted example datasets
 
@@ -238,8 +237,7 @@ No alternatives or backend defaults are silently substituted.
 Model, prior, contrasts, weights, subset, offset, missing-value policy, QR and
 sparse settings cannot be overridden. Unrecognized names and partial names
 are rejected. Export and fitting load rstanarm on demand; package startup
-remains lazy. Only Gaussian identity-link regression is supported; brms and
-GLM export are not implemented.
+remains lazy. Gaussian identity, binary logit and Poisson log regression are supported; brms export is not implemented.
 
 Routine tests intercept backend preprocessing and mock the sampling boundary.
 Set `FLEXBAYES_RUN_STAN=true` when running the export tests to enable the small
@@ -276,3 +274,58 @@ checking and export; identify priors again to establish new reference SDs.
 The actual data, formula, centered-intercept definition, exported priors and
 predictions retain their original units. No additional backend is loaded for
 standardized conversion or plotting.
+
+### Logistic and Poisson regression (Phase 6A)
+
+```r
+p = identify_priors(y ~ x + z, d, family = binomial(link = "logit"))
+# Or: family = poisson(link = "log")
+p = update(p, parameter = "x", belief(mode = .5), belief(sd = .2))
+checks = check_prior(p, n = 1000)
+plot(checks)
+arguments = as_rstanarm(p)
+# model = fit(p, chains = 4, iter = 2000)
+```
+
+Supported GLMs are binary numeric 0/1 responses with the logit link and
+nonnegative integer counts with the log link. Grouped binomial matrices,
+proportions, factor/logical responses, alternative links, offsets, weights and
+mixed models remain unsupported. Missing values are rejected as before.
+All-zero and all-one responses are allowed. rstanarm 2.32.2 rejects constant
+Poisson responses greater than one; identification reports that restriction.
+Observed counts must fit within Stan's integer range.
+
+For both GLMs, verified rstanarm 2.32.2 defaults are independent normal slopes
+with location zero and scale `max(1e-12, 2.5 / sd(design_column))` (constant
+columns use divisor one), and a centered intercept `Normal(0, 2.5)`. Scales
+are capped at the largest finite double, matching backend preprocessing.
+Unlike Gaussian defaults, GLM defaults do not use observed outcome SDs.
+There is **no residual sigma prior or draw**. Centering still uses training
+model-matrix means, including contrast and interaction columns.
+
+Beliefs and density plots use the linear predictor scale: log-odds for logistic
+models and log-rate for Poisson models. Exponentiating a slope gives an odds
+ratio or rate ratio, respectively, conditional on the model's other terms.
+Normal and fixed-df Student's t elicitation, consistency checks, ranking and
+whole-model family compatibility remain available. Gaussian-style fully
+standardized beliefs and plots are explicitly rejected for GLMs; outcome-scale
+elicitation is not implemented.
+
+Predictive objects additionally expose `linear_predictor`. Expected responses
+are `plogis(linear_predictor)` for logistic models and `exp(linear_predictor)`
+for Poisson models. Simulated observations use Bernoulli or Poisson sampling.
+The default plot separates expected-response uncertainty and observation
+variability with family-specific axis labels. Stable logistic calculations
+allow saturated probabilities of zero or one. Poisson simulation fails before
+sampling if any rate is nonfinite or above the explicit safety limit **1e8**;
+no rates or draws are clipped, discarded or resampled. Very diffuse defaults
+or extrapolated predictors can trigger this limit; revise priors/predictors.
+Underflow to a zero rate gives a zero observation.
+
+GLM export preserves the original family, design ordering, contrasts and
+centered-intercept priors, with autoscaling disabled. `prior_aux` is omitted
+because no auxiliary parameter exists (rstanarm rejects an explicit NULL in
+prior-only mode even for these GLMs). Its unused backend default does not
+create a model parameter. `fit()` continues returning native `stanreg` objects;
+existing Gaussian-only estimate methods are not extended to GLM summaries.
+Optional Stan tests fit both GLM families when `FLEXBAYES_RUN_STAN=true`.
