@@ -18,25 +18,57 @@ prior_fit_candidates = function(records, reference) {
   best
 }
 
-prior_select_compatible = function(object, parameter) {
-  result = object$candidates[[parameter]]
+# Recompute automatic selections without refitting or changing candidate ranks.
+# Defaults are fixed; elicited candidates are automatic choices, not user locks.
+prior_select_compatible = function(object) {
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
-  others = setdiff(slopes, parameter)
-  fixed = object$selected[others]
-  families = unique(vapply(Filter(Negate(is.null), fixed), `[[`, character(1), "distribution"))
-  alternatives = Filter(function(c) isTRUE(c$valid), result$alternatives)
-  if (parameter %in% slopes) alternatives = Filter(function(c) !length(families) || (length(families) == 1L && c$family == families), alternatives)
-  if (length(alternatives)) {
-    chosen = alternatives[[1]]
-    result[names(chosen)] = chosen
-    result$status = "selected"
-    result$message = NULL
-    object$selected[parameter] = list(chosen$distribution)
-  } else if (isTRUE(result$valid)) {
-    result$status = "backend_incompatible"
-    result$message = "Valid mathematical candidates exist, but rstanarm requires one slope prior family. Other parameters' existing priors were preserved."
+  options = lapply(names(object$selected), function(name) {
+    if (!length(object$beliefs[[name]])) return(list(list(valid = TRUE,
+      family = object$defaults[[name]]$distribution, distribution = object$defaults[[name]], rank = 0L)))
+    Filter(function(c) isTRUE(c$valid), object$candidates[[name]]$alternatives)
+  })
+  names(options) = names(object$selected)
+  fixed = slopes[lengths(object$beliefs[slopes]) == 0L]
+  fixed_families = unique(vapply(object$defaults[fixed], `[[`, character(1), "distribution"))
+  families = if (length(fixed_families)) fixed_families else c("normal", "student_t")
+  # Prefer a complete combination; otherwise retain the largest compatible
+  # subset. Sum of mathematical ranks breaks ties, then registry family order.
+  coverage = cost = numeric(length(families))
+  for (i in seq_along(families)) {
+    for (name in slopes) {
+      compatible = Filter(function(c) c$family == families[i], options[[name]])
+      if (length(compatible)) {
+        coverage[i] = coverage[i] + 1L
+        cost[i] = cost[i] + compatible[[1]]$rank
+      }
+    }
   }
-  object$candidates[[parameter]] = result
-  object$backend$compatible = all(vapply(object$selected, Negate(is.null), logical(1))) && length(unique(vapply(Filter(Negate(is.null), object$selected[slopes]), `[[`, character(1), "distribution"))) <= 1L
+  family = if (length(families)) families[order(-coverage, cost)[1]] else NULL
+  for (name in names(options)) {
+    if (!length(object$beliefs[[name]])) {
+      object$selected[name] = list(object$defaults[[name]])
+      next
+    }
+    result = object$candidates[[name]]
+    eligible = options[[name]]
+    if (name %in% slopes) eligible = Filter(function(c) identical(c$family, family), eligible)
+    object$selected[name] = list(NULL)
+    if (length(eligible)) {
+      chosen = eligible[[which.min(vapply(eligible, `[[`, numeric(1), "rank"))]]
+      # Remove diagnostics left over from a previous automatic selection.
+      fields = c("family", "distribution", "achieved", "residuals", "score", "rank", "reference_used")
+      result[fields] = lapply(fields, function(field) chosen[[field]])
+      result$valid = TRUE
+      result$status = "selected"
+      result$message = NULL
+      object$selected[name] = list(chosen$distribution)
+    } else if (length(options[[name]])) {
+      result$status = "backend_incompatible"
+      result$message = "Valid mathematical candidates exist, but rstanarm requires one slope prior family. Backend defaults were preserved."
+    }
+    object$candidates[[name]] = result
+  }
+  object$backend$compatible = all(vapply(object$selected, Negate(is.null), logical(1))) &&
+    length(unique(vapply(Filter(Negate(is.null), object$selected[slopes]), `[[`, character(1), "distribution"))) <= 1L
   object
 }

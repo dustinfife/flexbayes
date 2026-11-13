@@ -124,14 +124,20 @@ or unsuccessful candidates are retained with diagnostics.
 `p$candidates$x$mathematical` retains the mathematical preference.
 `p$selected$x` is the backend-compatible choice. rstanarm requires one shared
 family for all slope priors (with vectorized parameters); its centered intercept
-has a separate family argument. Selection holds every other currently selected
-prior fixed, choosing the highest-ranked compatible candidate for the updated
-parameter. It never changes another parameter's prior. An incompatible update
-retains its mathematical candidates but leaves its selection empty and marks
-`backend_incompatible`. Overall readiness is `p$backend$compatible`.
-When revising several slopes to t, explicitly revisit any blocked parameter
-with `update(p, parameter = "x")` after the other revisions. Restoring a default
-also checks compatibility. No fitting/export API is implemented yet.
+has a separate family argument. After every successful update, backend selections are recomputed for the
+whole model without refitting unchanged candidates. Backend defaults remain
+fixed. Elicited selections are automatic choices among acceptable candidates,
+so they may change when another parameter changes. Beliefs, mathematical
+preferences, and candidate ranks are preserved. No explicit candidate-selection
+API exists yet; a future explicit choice must be treated as a fixed constraint.
+The shared slope family maximizes the number of compatible selections, then
+minimizes the sum of mathematical ranks, with normal winning remaining ties.
+A complete compatible combination is preferred whenever one exists.
+If no complete combination exists, blocked parameters remain
+`backend_incompatible` with empty selections and overall compatibility false.
+Defaults are retained even in this state. Blocked parameters recover
+automatically as soon as subsequent revisions allow a compatible combination.
+The centered intercept is selected independently. No fitting/export API is implemented yet.
 
 `plot(p, parameter = "x")` compares acceptable candidate densities and labels
 which is selected and which is mathematical only. Invalid candidates are not

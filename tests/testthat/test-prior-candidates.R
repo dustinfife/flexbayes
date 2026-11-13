@@ -78,8 +78,7 @@ test_that("candidate plots compare valid densities and remain ggplots", {
 test_that("backend choice is separate from mathematical rank", {
   p = student_beliefs(prior_example(), "x")
   p = student_beliefs(p, "gb")
-  # Revisit x explicitly, without changing gb behind the user's back.
-  p = update(p, parameter = "x")
+  # x is restored automatically after gb changes.
   expect_true(p$backend$compatible)
   expect_equal(p$selected$x$distribution, "student_t")
   q = update(p, parameter = "x", remove = 3)
@@ -88,8 +87,65 @@ test_that("backend choice is separate from mathematical rank", {
   expect_equal(q$candidates$x$rank, 2L)
   expect_equal(q$selected$gb, p$selected$gb)
   restored = update(p, parameter = "x", remove = 1:3)
-  expect_identical(restored$candidates$x$status, "backend_incompatible")
+  expect_equal(restored$selected$x, restored$defaults$x)
+  expect_identical(restored$candidates$gb$status, "backend_incompatible")
   expect_false(restored$backend$compatible)
-  expect_null(restored$selected$x)
-  expect_equal(restored$selected$gb, p$selected$gb)
+  expect_null(restored$selected$gb)
+})
+
+test_that("whole-model selections recover in either update order", {
+  base = prior_example()
+  for (order in list(c("x", "gb"), c("gb", "x"))) {
+    p = student_beliefs(base, order[1])
+    expect_identical(p$candidates[[order[1]]]$status, "backend_incompatible")
+    rankings = p$candidates[[order[1]]]$alternatives
+    beliefs = p$beliefs[[order[1]]]
+    p = student_beliefs(p, order[2])
+    expect_true(p$backend$compatible)
+    expect_equal(p$selected$x$distribution, "student_t")
+    expect_equal(p$selected$gb$distribution, "student_t")
+    expect_equal(p$candidates[[order[1]]]$alternatives, rankings)
+    expect_equal(p$beliefs[[order[1]]], beliefs)
+    expect_equal(p$selected$`(Intercept)`, base$defaults$`(Intercept)`)
+    expect_equal(p$selected$sigma, base$defaults$sigma)
+    # Returning one slope to its default blocks the other; revising it back
+    # recovers both selections without revisiting the blocked slope.
+    p = update(p, parameter = order[2], remove = 1:3)
+    expect_false(p$backend$compatible)
+    expect_equal(p$selected[[order[2]]], base$defaults[[order[2]]])
+    expect_null(p$selected[[order[1]]])
+    p = student_beliefs(p, order[2])
+    expect_true(p$backend$compatible)
+    expect_equal(p$selected[[order[1]]]$distribution, "student_t")
+  }
+})
+
+test_that("automatic alternatives reselect globally while preserving rankings", {
+  base = prior_example()
+  p = update(base, parameter = "x", belief(mean = 0), belief(sd = 1))
+  rankings = p$candidates$x$alternatives
+  mathematical = p$candidates$x$mathematical
+  p = student_beliefs(p, "gb")
+  expect_true(p$backend$compatible)
+  expect_equal(p$selected$x$distribution, "student_t")
+  expect_equal(p$candidates$x$alternatives, rankings)
+  expect_equal(p$candidates$x$mathematical, mathematical)
+  p = update(p, parameter = "gb", remove = 1:3)
+  expect_true(p$backend$compatible)
+  expect_equal(p$selected$x$distribution, "normal")
+  expect_equal(p$candidates$x$alternatives, rankings)
+  # Contradictory updates also refresh compatibility without fitting them.
+  p = update(p, parameter = "gb", belief(value < 0, probability = .95),
+    belief(value > 1, probability = .95))
+  expect_identical(p$candidates$gb$status, "contradictory")
+  expect_null(p$candidates$gb$alternatives)
+  expect_false(p$backend$compatible)
+})
+
+test_that("Student t tail policy is centralized and fixed", {
+  expect_identical(prior_student_t_policy()$df, 7)
+  p = update(prior_example(), parameter = "x", belief(mean = 0))
+  candidate = p$candidates$x$alternatives$student_t$distribution
+  expect_equal(candidate$df, prior_student_t_policy()$df)
+  expect_equal(prior_distribution_operation(candidate, "sd"), p$defaults$x$sd)
 })

@@ -1,8 +1,12 @@
+# Fixed tail policy for elicitation; distribution operations can evaluate other
+# positive df values, but candidate fitting never optimizes df.
+prior_student_t_policy = function() list(df = 7)
+
 prior_distribution_registry = function() {
   list(normal = list(density = stats::dnorm, cdf = stats::pnorm,
     quantile = stats::qnorm, random = stats::rnorm, support = c(-Inf, Inf), sd_factor = 1),
     student_t = list(density = prior_dt, cdf = prior_pt, quantile = prior_qt,
-      random = prior_rt, support = c(-Inf, Inf), sd_factor = sqrt(7 / 5)),
+      random = prior_rt, support = c(-Inf, Inf), sd_factor = sqrt(prior_student_t_policy()$df / (prior_student_t_policy()$df - 2))),
     exponential = list(density = stats::dexp, cdf = stats::pexp,
       quantile = stats::qexp, random = stats::rexp, support = c(0, Inf)))
 }

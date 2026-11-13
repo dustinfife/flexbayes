@@ -39,7 +39,7 @@ prior_fit_location_scale = function(records, reference, family = "normal") {
     }
   }
   entry = prior_distribution_registry()[[family]]
-  unit = if (family == "normal") list(distribution = "normal", mean = 0, sd = 1) else list(distribution = "student_t", location = 0, scale = 1, df = 7)
+  unit = if (family == "normal") list(distribution = "normal", mean = 0, sd = 1) else list(distribution = "student_t", location = 0, scale = 1, df = prior_student_t_policy()$df)
   A = matrix(numeric(), ncol = 2)
   b = numeric()
   for (r in records) {
@@ -55,7 +55,7 @@ prior_fit_location_scale = function(records, reference, family = "normal") {
     solution = base + direction * (b[1] - sum(direction * base)) / sum(direction^2)
   } else solution = as.numeric(qr.solve(A, b))
   if (any(!is.finite(solution)) || solution[2] <= 0) return(list(valid = FALSE, reference_used = rank < 2, message = "No location-scale prior with positive scale satisfies these beliefs."))
-  distribution = if (family == "normal") list(distribution = family, mean = solution[1], sd = solution[2]) else list(distribution = family, location = solution[1], scale = solution[2], df = 7)
+  distribution = if (family == "normal") list(distribution = family, mean = solution[1], sd = solution[2]) else list(distribution = family, location = solution[1], scale = solution[2], df = prior_student_t_policy()$df)
   achieved = vapply(records, prior_distribution_target, numeric(1), prior = distribution)
   residuals = (achieved - vapply(records, `[[`, numeric(1), "target")) / vapply(records, `[[`, numeric(1), "tolerance")
   valid = all(abs(residuals) <= 1)
@@ -94,26 +94,17 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
   if (!length(records)) {
     object$selected[parameter] = list(object$defaults[[parameter]])
     object$candidates[parameter] = list(list())
-    slopes = setdiff(colnames(object$model$X), "(Intercept)")
-    families = unique(vapply(Filter(Negate(is.null), object$selected[slopes]), `[[`, character(1), "distribution"))
-    if (length(families) > 1L) {
-      object$selected[parameter] = list(NULL)
-      object$candidates[[parameter]] = list(status = "backend_incompatible", valid = TRUE,
-        mathematical = object$defaults[[parameter]], message = "Restored backend default conflicts with existing slope prior families; other priors were preserved.")
-    }
-    object$backend$compatible = length(families) <= 1L && all(vapply(object$selected, Negate(is.null), logical(1)))
-    return(object)
+    return(prior_select_compatible(object))
   }
   consistency = prior_check_probability_constraints(records)
   if (consistency$contradictory) {
     object$candidates[[parameter]] = list(valid = FALSE, status = "contradictory",
       conflicts = consistency$conflicts, message = consistency$message)
     object$selected[parameter] = list(NULL)
-    object$backend$compatible = FALSE
-    return(object)
+    return(prior_select_compatible(object))
   }
   result = prior_fit_candidates(records, object$defaults[[parameter]])
   object$candidates[[parameter]] = result
   object$selected[parameter] = list(NULL)
-  prior_select_compatible(object, parameter)
+  prior_select_compatible(object)
 }
