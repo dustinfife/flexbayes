@@ -1,6 +1,5 @@
-# Factors convert standardized slopes into original coefficient units.
-prior_standardization_metadata = function(model) {
-  if (model$family$family != "gaussian") return(list())
+# Identify simple numeric slope columns for standardized and ratio beliefs.
+prior_numeric_slope_metadata = function(model) {
   result = list()
   terms = model$terms
   factors = attr(terms, "factors")
@@ -19,9 +18,18 @@ prior_standardization_metadata = function(model) {
     indices = which(attr(model$X, "assign") == term)
     if (length(indices) != 1L) next
     sx = stats::sd(model$X[, indices])
-    sy = stats::sd(stats::model.response(model$frame))
-    result[[colnames(model$X)[indices]]] = list(predictor = variable,
-      predictor_sd = sx, outcome_sd = sy, factor = sy / sx)
+    result[[colnames(model$X)[indices]]] = list(predictor = variable, predictor_sd = sx)
+  }
+  result
+}
+
+prior_standardization_metadata = function(model) {
+  if (model$family$family != "gaussian") return(list())
+  result = prior_numeric_slope_metadata(model)
+  sy = stats::sd(stats::model.response(model$frame))
+  for (name in names(result)) {
+    result[[name]]$outcome_sd = sy
+    result[[name]]$factor = sy / result[[name]]$predictor_sd
   }
   result
 }

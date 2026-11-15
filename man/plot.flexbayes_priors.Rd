@@ -11,8 +11,10 @@
 
 \item{parameter}{Optional parameter name. When supplied, compare acceptable candidates.}
 
-\item{scale}{Plot in original, standardized, probability or response units.
-Outcome scales require the matching GLM centered intercept; densities
+\item{scale}{Plot in original, standardized, probability, response, odds_ratio
+or rate_ratio units. Ratio plots use a positive log10 x-axis.
+Outcome scales require the matching GLM centered intercept; ratios require
+an eligible numeric slope. Transformed densities
 include the transformation Jacobian.}
 
 \item{...}{Reserved.}

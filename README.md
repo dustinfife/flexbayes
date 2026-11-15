@@ -308,8 +308,7 @@ models and log-rate for Poisson models. Exponentiating a slope gives an odds
 ratio or rate ratio, respectively, conditional on the model's other terms.
 Normal and fixed-df Student's t elicitation, consistency checks, ranking and
 whole-model family compatibility remain available. Gaussian-style fully
-standardized beliefs and plots are explicitly rejected for GLMs; outcome-scale
-elicitation is not implemented.
+standardized beliefs and plots are explicitly rejected for GLMs; outcome-scale intercept and ratio-scale slope elicitation are described below.
 
 Predictive objects additionally expose `linear_predictor`. Expected responses
 are `plogis(linear_predictor)` for logistic models and `exp(linear_predictor)`
@@ -405,3 +404,71 @@ Except for the analytic single-mode check above, the one-dimensional reference s
 or log-scale `[-10,3]`; extreme targets outside that search may remain
 unresolved. Multiconstraint searches use several starting values and no fixed
 parameter bounds, but still reject nonfinite or numerically unreliable results.
+
+### Odds-ratio and rate-ratio slope beliefs (Phase 6C)
+
+```r
+# Logistic model:
+p = update(p, parameter = "x",
+  belief(mode = 2, scale = "odds_ratio"),
+  belief(value < 4, probability = .95, scale = "odds_ratio"))
+plot(p, parameter = "x", scale = "odds_ratio")
+# Poisson model uses scale = "rate_ratio" in both belief() and plot().
+```
+
+An odds ratio or rate ratio is `exp(beta)` for a one-unit increase in an eligible
+numeric predictor, holding other predictors constant. An odds ratio multiplies
+odds, not probabilities; a rate ratio multiplies expected counts, rather than
+adding to them. Scales must match the model family. Intercepts, Gaussian models,
+factor coefficients, transformed/polynomial coefficients and interaction
+slopes are not eligible. A main-effect coefficient is also rejected if the same
+predictor appears in another transformed term, such as `x + I(x^2)`, because its
+coefficient alone does not describe the one-unit effect. Other predictors may
+have supported transformations without changing eligibility of a plain slope.
+
+All ratio targets and inequality thresholds must be strictly positive and
+finite. Ratios below, equal to, or above 1 are supported. The constructor retains
+the entered target/threshold, expression and scale. Ratio and link-scale beliefs
+can coexist; removal indices, mathematical rankings and whole-model coefficient
+family restrictions are unchanged.
+
+Both scales reuse the Phase 6B exponential transformation. Quantile constraints
+map through `log()`, while normal link priors induce lognormal ratios:
+`mean = exp(mu + s^2/2)`, `mode = exp(mu - s^2)`, and
+`sd = exp(mu + s^2/2) * sqrt(expm1(s^2))`, evaluated in stable log form.
+Exponentiated Student's t has no finite positive moments and no attained
+positive global mode; those constraints retain explicit unsupported diagnostics,
+while its ratio probability constraints remain available.
+
+For a single ratio mean or mode belief, the actual backend-default link SD is
+retained, with `mu = log(mean) - s^2/2` or `mu = log(mode) + s^2`.
+For a single ratio SD belief, the backend-default link location is retained and
+the lognormal variance equation is solved analytically for the spread. No SD
+cap or arbitrary location is introduced. Sources are marked `Elicited*`, and
+diagnostics name the backend-default parameter retained. Numerically
+unrepresentable constraints stay unresolved. Multiple nonlinear beliefs use
+the existing candidate search and its documented limitations.
+
+Ratio plots show the induced density `f_beta(log(r))/r` on a positive log10
+x-axis. Density values remain per unit of the ratio, not per unit log-ratio.
+As with existing plots, the grid covers link quantiles .001 to .999; if those
+points cannot be represented on the ratio scale, plotting fails clearly rather
+than silently deleting them. Selected priors, exports and fitting remain on
+the original link-coefficient scale. Predictor/response data, centering,
+contrasts and design ordering are unchanged. Predictive checks still generate
+probabilities or expected counts and observations, never ratio outcomes.
+
+Ratio-scale `summary(p, diagnostics = TRUE)` additionally reports the selected
+induced distribution's median, central 95% interval, mean and mode. These describe
+ratios, not coefficient moments. A mode-only prior can have a very large mean
+when a broad backend-default coefficient SD is retained; the summary displays
+both implications without altering that SD or the selected prior. Single-belief
+reference diagnostics distinguish user-supplied constraints from the retained
+backend link SD or location. Quantile-only reference fits distinguish parameters
+held fixed from parameters resolved jointly using the backend reference.
+
+Very large finite values use grouping or scientific notation. Values beyond
+floating-point display range are explicitly labeled rather than printed as
+ordinary zeros or infinities. Exponentiated Student's t summaries report no finite
+mean and no attained positive global mode, while still showing its median and
+central interval. Compact `print(p)` and ordinary summaries are unchanged.

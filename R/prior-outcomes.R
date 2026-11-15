@@ -1,6 +1,7 @@
-prior_outcome_scale = function(scale) !is.null(scale) && scale %in% c("probability", "response")
+prior_outcome_scale = function(scale) !is.null(scale) && scale %in% c("probability", "response", "odds_ratio", "rate_ratio")
 
 prior_outcome_validate = function(record, object, parameter) {
+  if (prior_ratio_scale(record$scale)) return(prior_ratio_validate(record, object, parameter))
   if (parameter != "(Intercept)") stop("Outcome-scale beliefs currently support the centered intercept only.")
   expected = switch(object$model$family$family, binomial = "probability", poisson = "response", "unsupported")
   if (record$scale != expected) stop("This family does not support the requested outcome scale: ", record$scale)
@@ -67,7 +68,7 @@ prior_outcome_target = function(record, prior) {
   normal = prior$distribution == "normal"
   location = if (normal) prior$mean else prior$location
   scale = if (normal) prior$sd else prior$scale
-  if (record$scale == "response") {
+  if (record$scale != "probability") {
     if (!normal) stop("Exponentiated Student's t has no finite positive moments and no attained positive global mode; this belief is unsupported.")
     logvalue = switch(record$type, mean = location + scale^2 / 2,
       sd = location + scale^2 / 2 + .5 * prior_logexpm1(scale^2), mode = location - scale^2)
@@ -105,7 +106,7 @@ prior_outcome_objective = function(theta, records, family) {
 
 prior_fit_outcome_unique = function(records, reference, family) {
   if (any(vapply(records, function(r) identical(r$scale, "probability") && (r$type %in% c("mean", "sd") && r$tolerance < 1e-7 || r$type == "mode" && r$tolerance < 1e-10), logical(1)))) return(list(valid = FALSE, message = "Requested tolerance is below supported numerical precision: probability mean/SD require >= 1e-7 and mode >= 1e-10; numerical evaluation has a separate 1e-8 error budget."))
-  if (family == "student_t" && any(vapply(records, function(r) prior_outcome_scale(r$scale) && (r$scale == "response" && r$type != "probability" || r$type == "mode"), logical(1)))) return(list(valid = FALSE, message = "Transformed Student's t has no attained interior global mode; exp(t) also has no finite positive moments. Requested combination is unsupported."))
+  if (family == "student_t" && any(vapply(records, function(r) prior_outcome_scale(r$scale) && (r$scale != "probability" && r$type != "probability" || r$type == "mode"), logical(1)))) return(list(valid = FALSE, message = "Transformed Student's t has no attained interior global mode; exp(t) also has no finite positive moments. Requested combination is unsupported."))
   nonlinear = any(vapply(records, function(r) prior_outcome_scale(r$scale) && r$type != "probability", logical(1)))
   if (!nonlinear) {
     transformed = prior_outcome_probability_records(records)
@@ -126,6 +127,7 @@ prior_fit_outcome_unique = function(records, reference, family) {
   base_scale = reference$sd / prior_distribution_registry()[[family]]$sd_factor
   starts = expand.grid(location = c(reference$mean, 0, 1, -1), scale = c(base_scale, .25, 1))
   if (length(records) == 1L) {
+    if (prior_ratio_scale(records[[1]]$scale)) return(prior_fit_single_ratio(records[[1]], reference))
     # Resolve one constraint by anchoring the other parameter to a disclosed
     # reference; never alter the backend spread to make a mode feasible.
     if (records[[1]]$type == "mode" && records[[1]]$scale == "probability") return(prior_fit_single_probability_mode(records[[1]], reference))
@@ -153,7 +155,7 @@ prior_fit_outcome_unique = function(records, reference, family) {
   valid = all(is.finite(residuals)) && all(abs(residuals) <= 1)
   list(valid = valid, distribution = prior_outcome_distribution(best$par, family),
     achieved = achieved, residuals = residuals, score = sum(residuals^2), reference_used = FALSE,
-    numerical = "Outcome moments: estimated integration error budget 1e-8; root tolerance 1e-12; search convergence reported separately.",
+    numerical = if (any(vapply(records, function(r) identical(r$scale, "probability"), logical(1)))) "Outcome moments: estimated integration error budget 1e-8; mode root tolerance 1e-12; search convergence reported separately." else "Outcome moments: analytic lognormal/link evaluations; no numerical integration; search convergence reported separately.",
     convergence = best$convergence, message = if (!valid) "No acceptable outcome-scale candidate found; nonlinear search is not a proof of infeasibility." else NULL)
 }
 

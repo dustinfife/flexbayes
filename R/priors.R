@@ -106,9 +106,12 @@ print.summary.flexbayes_priors = function(x, ...) {
       }
     }
     outcome_records = Filter(function(r) prior_outcome_scale(r$scale), records)
-    if (length(outcome_records)) prior_console_line("Outcome-scale beliefs describe the expected outcome at the model-matrix centering reference, not individual observed outcomes.")
+    ratio_records = Filter(function(r) prior_ratio_scale(r$scale), outcome_records)
+    if (length(ratio_records)) prior_console_line(paste0("Requested scale: ", ratio_records[[1]]$scale, "; multiplicative effect of a one-unit predictor increase, holding other predictors constant. This is not a probability ratio or an additive response change."))
+    if (length(outcome_records) && !length(ratio_records)) prior_console_line("Outcome-scale beliefs describe the expected outcome at the model-matrix centering reference, not individual observed outcomes.")
     candidate = object$candidates[[name]]
     if (!is.null(candidate$message)) prior_console_line(paste0("Warning (", name, "): ", candidate$message))
+    if (diagnostics && length(ratio_records)) prior_ratio_diagnostics(object, name)
     if (diagnostics && identical(candidate$status, "contradictory")) {
       cat("  Candidate fitting skipped: mathematical contradiction.\n")
     } else if (diagnostics) {
@@ -150,17 +153,19 @@ print.summary.flexbayes_priors = function(x, ...) {
 #' Plot selected and candidate prior densities
 #' @param x Prior specification.
 #' @param parameter Optional parameter name. When supplied, compare acceptable candidates.
-#' @param scale Plot in original, standardized, probability or response units.
-#'   Outcome scales require the matching GLM centered intercept; densities
+#' @param scale Plot in original, standardized, probability, response, odds_ratio
+#'   or rate_ratio units. Ratio plots use a positive log10 x-axis.
+#'   Outcome scales require the matching GLM centered intercept; ratios require
+#'   an eligible numeric slope. Transformed densities
 #'   include the transformation Jacobian.
 #' @param ... Reserved.
 #' @return A ggplot object.
 #' @export
 plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
-  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response")) stop("scale must be original, standardized, probability or response.")
+  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
   factor = 1
   if (prior_outcome_scale(scale)) {
-    if (is.null(parameter) || length(parameter) != 1L) stop("Select the centered intercept for an outcome-scale plot.")
+    if (is.null(parameter) || length(parameter) != 1L) stop("Select one eligible parameter for a transformed-scale plot.")
     prior_outcome_validate(list(scale = scale, type = "mean", target = if (scale == "probability") .5 else 1), x, parameter)
   }
   if (scale == "standardized") {
@@ -188,6 +193,7 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
         jacobian = if (scale == "probability") outcome * (1 - outcome) else outcome
         density = density / jacobian
         keep = is.finite(outcome) & is.finite(density) & jacobian > 0
+        if (any(!keep) && prior_ratio_scale(scale)) stop("Ratio density exceeds the numerical plotting range; no density points were silently removed.")
         if (any(!keep)) warning("Some transformed density points reached numerical boundaries and were omitted from the plot.", call. = FALSE)
         grid = outcome[keep]
         density = density[keep]
@@ -198,5 +204,7 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
         Candidate = paste0(label, if (selected) " (selected)" else " (mathematical only)"))
     }
   }
-  ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else if (scale == "probability") "Probability at centering reference" else if (scale == "response") "Expected count at centering reference" else if (x$model$family$family == "binomial") "Coefficient (log-odds)" else if (x$model$family$family == "poisson") "Coefficient (log-rate)" else "Parameter value", y = "Prior density")
+  result = ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else if (scale == "probability") "Probability at centering reference" else if (scale == "response") "Expected count at centering reference" else if (scale == "odds_ratio") "Odds ratio (one-unit predictor increase)" else if (scale == "rate_ratio") "Rate ratio (one-unit predictor increase)" else if (x$model$family$family == "binomial") "Coefficient (log-odds)" else if (x$model$family$family == "poisson") "Coefficient (log-rate)" else "Parameter value", y = "Prior density")
+  if (prior_ratio_scale(scale)) result = result + ggplot2::scale_x_log10()
+  result
 }

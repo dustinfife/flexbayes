@@ -27,7 +27,8 @@ real numeric value. The original comparison is retained.}
 
 \item{scale}{Units: original (default), standardized Gaussian slope,
 probability for a logistic centered intercept, or response for a Poisson
-centered intercept. Outcome means, modes and SDs constrain the induced
+centered intercept; odds_ratio for a plain logistic numeric slope or
+rate_ratio for a plain Poisson numeric slope. Outcome means, modes and SDs constrain the induced
 distribution, not a naively transformed link-scale moment.}
 }
 \value{

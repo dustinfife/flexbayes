@@ -7,12 +7,13 @@
 #' @param tolerance Absolute acceptance tolerance on the target scale.
 #' @param scale Units: original (default), standardized Gaussian slope,
 #'   probability for a logistic centered intercept, or response for a Poisson
-#'   centered intercept. Outcome means, modes and SDs constrain the induced
+#'   centered intercept; odds_ratio for a plain logistic numeric slope or
+#'   rate_ratio for a plain Poisson numeric slope. Outcome means, modes and SDs constrain the induced
 #'   distribution, not a naively transformed link-scale moment.
 #' @return A prior_belief record.
 #' @export
 belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd = NULL, tolerance = 1e-6, scale = "original") {
-  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response")) stop("scale must be original, standardized, probability or response.")
+  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
   expr = substitute(expression)
   targets = list(mean = mean, mode = mode, sd = sd)
   supplied = !vapply(targets, is.null, logical(1))
