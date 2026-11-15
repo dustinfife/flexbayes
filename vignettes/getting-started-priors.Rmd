@@ -89,10 +89,10 @@ priors = update(priors, parameter = "x", belief(mode = 3))
 print(priors)
 ```
 
-We've supplied a mode, but a narrow distribution around 3 and a very
-wide one could both satisfy it. The `Elicited*` asterisk tells us that
-backend defaults supplied reference information our belief left open.
-We didn't supply that extra information ourselves.
+We told flexbayes where the distribution should peak, but we didn't say
+anything about its width. In this example, flexbayes kept the standard
+deviation from the backend's default prior. That's what `Elicited*`
+means here: we supplied the peak; the backend supplied the width.
 
 Let's add something about the uncertainty. Suppose we'd give a 95%
 probability to the study-hour slope being below 6 points:
@@ -127,26 +127,6 @@ one. It's a regular ggplot object; you can add `ggplot2::theme_bw()`.
 The other parameters still have their backend defaults. We'll need to
 think about those too: one reassuring density can't tell us what the
 whole model will predict.
-
-You may find standardized slopes easier to think about. Instead of
-score points per study hour, we describe the change in expected score,
-in outcome SDs, for a one-SD increase in study hours. Here's a separate
-specification using that language:
-
-```{r standardized}
-standardized = update(
-  priors, parameter = "x", remove = c(1, 2),
-  belief(mode = .3, scale = "standardized"),
-  belief(sd = .15, scale = "standardized")
-)
-print(standardized)
-```
-
-The conversion uses the observed sample SDs:
-`beta_star = beta * sd(x) / sd(y)`. flexbayes puts the beliefs into
-original coefficient units; the model data stay as they were. We saved
-this alternative as `standardized`, so we'll continue with our original
-`priors` below.
 
 ## What if the beliefs do not fit?
 
@@ -222,10 +202,10 @@ labels cases, not hours. Use `plot(check, type = "expected")` or
 `type = "simulated"` to inspect one panel. We'll keep these cases for
 the next check.
 
-Look at the scores the model considers plausible. A score of 140 on a
-100-point test would stand out on a transcript. It would also be
-impossible. A Gaussian model is unbounded; narrower priors cannot impose
-hard score limits.
+Suppose this is a 100-point test, but our prior predictive check suggests
+that scores of 140 are plausible. That's a problem. Students can't score
+more than 100 points, regardless of how much they study. A Gaussian
+model is unbounded; narrower priors cannot impose hard score limits.
 
 We need a substantive reason to revise. Suppose earlier studies suggest
 an expected score near 65 at the centering reference and a
@@ -254,6 +234,28 @@ elicitation isn't yet supported.
 Keep revising when substantive knowledge justifies it. The check helps
 us discover implications we hadn't considered, without tuning priors to
 imitate the outcomes already in front of us.
+
+## Other ways to express your beliefs
+
+You may find standardized slopes easier to think about. Instead of
+score points per study hour, we describe the change in expected score,
+in outcome SDs, for a one-SD increase in study hours. Here's a separate
+specification using that language:
+
+```{r standardized}
+standardized = update(
+  priors, parameter = "x", remove = c(1, 2),
+  belief(mode = .3, scale = "standardized"),
+  belief(sd = .15, scale = "standardized")
+)
+print(standardized)
+```
+
+The conversion uses the observed sample SDs:
+`beta_star = beta * sd(x) / sd(y)`. flexbayes puts the beliefs into
+original coefficient units; the model data stay as they were. We saved
+this alternative as `standardized`; our main specification and the
+predictive checks above remain unchanged.
 
 ## Where to go next
 
