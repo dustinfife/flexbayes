@@ -18,9 +18,9 @@ library(flexbayes)
 
 ## Why elicit priors?
 
-Suppose we're studying whether students who study longer get higher
-test scores. Earlier research may already suggest that another hour
-helps, though probably not by 40 points.
+Suppose we're studying whether students who study longer get higher test
+scores. Earlier research may already suggest that another hour helps,
+though probably not by 40 points.
 
 Those expectations can become a **prior**: what we believe about a model
 parameter before using outcome evidence to estimate it. With
@@ -62,10 +62,11 @@ print(priors)
 Each row shows a parameter, its selected prior, its source, and our
 belief count. That count is zero so far: these are backend defaults.
 
-In `Normal(a, b)`, `a` is the location and `b` is the standard deviation.
-`Exponential(r)` uses rate `r`. Students with the same study hours and
-practice sessions can still get different scores. The `sigma` row
-describes that residual variation around their modelled expected scores.
+In `Normal(a, b)`, `a` is the location and `b` is the standard
+deviation. `Exponential(r)` uses rate `r`. Students with the same study
+hours and practice sessions can still get different scores. The `sigma`
+row describes that residual variation around their modelled expected
+scores.
 
 One detail deserves a pause: the intercept is **centered**. It describes
 the expected score at 5 study hours and 1 practice session, the training
@@ -148,7 +149,8 @@ probability when there's only 1 to allocate.
 
 A different distribution won't rescue that. flexbayes keeps the beliefs
 visible and marks the contradiction instead of reverting to a default.
-We need to reconsider the statements. Here, we'll remove the two we added:
+We need to reconsider the statements. Here, we'll remove the two we
+added:
 
 ```{r repair}
 priors = update(priors, parameter = "x", remove = c(3, 4))
@@ -202,10 +204,11 @@ labels cases, not hours. Use `plot(check, type = "expected")` or
 `type = "simulated"` to inspect one panel. We'll keep these cases for
 the next check.
 
-Suppose this is a 100-point test, but our prior predictive check suggests
-that scores of 140 are plausible. That's a problem. Students can't score
-more than 100 points, regardless of how much they study. A Gaussian
-model is unbounded; narrower priors cannot impose hard score limits.
+Suppose this is a 100-point test, but our prior predictive check
+suggests that scores of 140 are plausible. That's a problem. Students
+can't score more than 100 points, regardless of how much they study. A
+Gaussian model is unbounded; narrower priors cannot impose hard score
+limits.
 
 We need a substantive reason to revise. Suppose earlier studies suggest
 an expected score near 65 at the centering reference and a
@@ -228,8 +231,8 @@ plot(revised_check)
 Compare expected-score uncertainty at the same predictor values. The
 additional beliefs narrow it here. Individual-observation intervals need
 not shrink by as much: they still include residual variation. `sigma`
-has exactly the same backend-default prior in both checks; residual-scale
-elicitation isn't yet supported.
+has exactly the same backend-default prior in both checks;
+residual-scale elicitation isn't yet supported.
 
 Keep revising when substantive knowledge justifies it. The check helps
 us discover implications we hadn't considered, without tuning priors to
@@ -237,9 +240,9 @@ imitate the outcomes already in front of us.
 
 ## Other ways to express your beliefs
 
-You may find standardized slopes easier to think about. Instead of
-score points per study hour, we describe the change in expected score,
-in outcome SDs, for a one-SD increase in study hours. Here's a separate
+You may find standardized slopes easier to think about. Instead of score
+points per study hour, we describe the change in expected score, in
+outcome SDs, for a one-SD increase in study hours. Here's a separate
 specification using that language:
 
 ```{r standardized}
@@ -260,8 +263,8 @@ predictive checks above remain unchanged.
 ## Where to go next
 
 Once satisfied, use `as_rstanarm(revised)` to inspect backend arguments
-and `fit(revised)` to fit the original model. We'll leave both for later.
-We haven't needed to fit a model to examine our priors.
+and `fit(revised)` to fit the original model. We'll leave both for
+later. We haven't needed to fit a model to examine our priors.
 
 See [`identify_priors()`](../html/identify_priors.html),
 [`belief()`](../html/belief.html), [`update()` for prior
