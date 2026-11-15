@@ -127,8 +127,8 @@ prior_fit_outcome_unique = function(records, reference, family) {
   starts = expand.grid(location = c(reference$mean, 0, 1, -1), scale = c(base_scale, .25, 1))
   if (length(records) == 1L) {
     # Resolve one constraint by anchoring the other parameter to a disclosed
-    # reference. Mode needs a unimodal logistic reference scale.
-    if (records[[1]]$type == "mode" && records[[1]]$scale == "probability") base_scale = min(base_scale, 1)
+    # reference; never alter the backend spread to make a mode feasible.
+    if (records[[1]]$type == "mode" && records[[1]]$scale == "probability") return(prior_fit_single_probability_mode(records[[1]], reference))
     fixed = c(reference$mean, log(base_scale))
     index = if (records[[1]]$type == "sd") 2L else 1L
     single = stats::optimize(prior_outcome_single_objective, c(if (index == 1L) -50 else -10, if (index == 1L) 50 else 3), records = records, family = family, fixed = fixed, index = index, tol = 1e-12)
@@ -136,7 +136,7 @@ prior_fit_outcome_unique = function(records, reference, family) {
     values = tryCatch(prior_outcome_values(fixed, records, family), error = function(e) NA_real_)
     residuals = (values - records[[1]]$target) / records[[1]]$tolerance
     valid = all(is.finite(residuals)) && all(abs(residuals) <= 1)
-    return(list(valid = valid, distribution = prior_outcome_distribution(fixed, family), achieved = values, residuals = residuals, score = sum(residuals^2), reference_used = TRUE, numerical = "Single-belief search: reference location or SD held fixed; logistic mode reference SD capped at 1 for unimodality.", message = if (!valid) "No acceptable candidate at the reference anchoring; supply more beliefs." else NULL))
+    return(list(valid = valid, distribution = prior_outcome_distribution(fixed, family), achieved = values, residuals = residuals, score = sum(residuals^2), reference_used = TRUE, numerical = "Single-belief search: actual backend reference location or SD held fixed.", message = if (!valid) "No acceptable candidate at the reference anchoring; supply more beliefs." else NULL))
   }
   best = NULL
   for (i in seq_len(nrow(starts))) {
@@ -192,4 +192,27 @@ prior_outcome_jacobian = function(theta, records, family) {
 
 prior_logexpm1 = function(x) {
   if (x > 50) x + log1p(-exp(-x)) else log(expm1(x))
+}
+
+# Stationarity of log f_P(p), including its Jacobian, fixes location uniquely
+# once the requested probability mode and the reference SD are fixed.
+prior_fit_single_probability_mode = function(record, reference) {
+  target = record$target
+  eta = stats::qlogis(target)
+  location = eta - reference$sd^2 * (2 * target - 1)
+  distribution = list(distribution = "normal", mean = location, sd = reference$sd)
+  reason = "The actual backend-default spread cannot support this requested mode as a unique interior global mode (or cannot establish it reliably near a numerical boundary). Add an SD or informative quantile belief; no reference spread was modified."
+  failure = list(valid = FALSE, reference_used = FALSE, reference_sd = reference$sd, message = reason)
+  # Positive curvature makes this stationary point a local minimum.
+  if (-1 / reference$sd^2 + 2 * target * (1 - target) > 1e-12) return(failure)
+  achieved = tryCatch(prior_logit_normal_mode(location, reference$sd), error = function(e) NA_real_)
+  if (!is.finite(achieved) || achieved <= 0 || achieved >= 1 ||
+      abs(stats::qlogis(achieved) - eta) > 1e-8 * (1 + abs(eta))) return(failure)
+  residual = (achieved - target) / record$tolerance
+  if (abs(residual) > 1) return(failure)
+  list(valid = TRUE, distribution = distribution, achieved = achieved,
+    residuals = residual, score = residual^2, reference_used = TRUE,
+    reference_sd = reference$sd,
+    numerical = paste0("Single probability mode: actual backend-default link SD = ",
+      format(reference$sd), " preserved unchanged; location elicited using the Jacobian and unique global mode verified. Mode root tolerance 1e-12."))
 }

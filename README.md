@@ -381,8 +381,11 @@ Diagnostics show achieved values, numerical policy and convergence information.
 
 For one unique nonlinear belief, the backend reference SD is held fixed while
 location is fitted, or reference location is held fixed for an SD belief.
-For a single logistic mode belief only, reference link SD is capped at 1 to
-ensure unimodality; diagnostics disclose this extra anchoring policy. Exact
+For a single logistic mode belief, the actual backend-default link SD is
+preserved only if it supports the requested mode as a unique interior global
+mode. The implied location is derived from the full transformed density and
+checked against all competing stationary points. Otherwise the prior remains
+unresolved and asks for an SD or informative quantile; no SD cap is applied. Exact
 redundant beliefs share that anchoring. More general rank-deficient nonlinear
 constraint combinations currently remain unresolved with an informative message;
 add an SD or informative quantile. This is a current numerical limitation.
@@ -398,7 +401,7 @@ Export and fitting use the selected link prior; predictive checks still produce
 expected outcomes and simulated observations through the original likelihood.
 No new families, outcome-scale slopes, or Stan sampler are added.
 
-The one-dimensional reference search currently covers link location `[-50,50]`
+Except for the analytic single-mode check above, the one-dimensional reference search currently covers link location `[-50,50]`
 or log-scale `[-10,3]`; extreme targets outside that search may remain
 unresolved. Multiconstraint searches use several starting values and no fixed
 parameter bounds, but still reject nonfinite or numerically unreliable results.
