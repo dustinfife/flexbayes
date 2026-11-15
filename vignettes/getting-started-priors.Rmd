@@ -18,17 +18,20 @@ library(flexbayes)
 
 ## Why elicit priors?
 
-A prior describes what you believe about a model parameter before using
-the outcome evidence to estimate it. Rather than choosing a
-distribution's parameters directly, you can state substantive beliefs.
-**flexbayes** fits candidate distributions to those constraints, shows
-their implications, and helps you revise them before fitting a model.
+Suppose we're studying whether students who study longer get higher
+test scores. Earlier research may already suggest that another hour
+helps, though probably not by 40 points.
 
-We will consider a Gaussian regression of a test score (`y`) on study
-hours (`x`) and additional practice sessions (`z`). The simulated data
-keep the example reproducible; imagine that the beliefs below come from
-earlier studies and subject-matter knowledge, not a regression fitted to
-these outcomes.
+Those expectations can become a **prior**: what we believe about a model
+parameter before using outcome evidence to estimate it. With
+**flexbayes**, we state beliefs, fit candidate distributions to them,
+and examine their implications before fitting the model.
+
+We'll use a Gaussian regression of test score (`y`) on study hours (`x`)
+and additional practice sessions (`z`). These data are simulated so you
+can reproduce the example. Imagine that our beliefs come from earlier
+research and subject-matter knowledge, rather than a regression fitted
+to these outcomes.
 
 ```{r data}
 set.seed(2026)
@@ -41,10 +44,10 @@ d$y = 50 + 3 * d$x + 2 * d$z + rnorm(nrow(d), sd = 4)
 
 ## Identify existing priors
 
-Install `rstanarm` before running this guide. The current default-prior
-adapter is verified for **rstanarm 2.32.2** and reports an error for
-other versions rather than guessing their defaults. Nothing in this
-vignette runs Stan sampling.
+Before supplying our own beliefs, let's see what the backend would use.
+Install `rstanarm` to follow along. The current default-prior adapter is
+verified for **rstanarm 2.32.2**; other versions produce an error rather
+than a guess about their defaults. We won't run Stan sampling here.
 
 ```{r identify}
 priors = identify_priors(
@@ -56,40 +59,43 @@ priors = identify_priors(
 print(priors)
 ```
 
-Each row shows a parameter, its selected prior, its source, and its
-belief count. `Normal(a, b)` means location `a` and standard deviation
-`b`; `Exponential(r)` uses rate `r`. Initially every prior comes from
-the backend. The `sigma` row describes residual variation between
-individual scores and their modelled expected scores.
+Each row shows a parameter, its selected prior, its source, and our
+belief count. That count is zero so far: these are backend defaults.
 
-The intercept is **centered**: it describes the expected score at the
-training model-matrix column means, not at zero study hours. Here those
-reference values are 5 study hours and 1 practice session.
-`summary(priors)` displays them.
+In `Normal(a, b)`, `a` is the location and `b` is the standard deviation.
+`Exponential(r)` uses rate `r`. Students with the same study hours and
+practice sessions can still get different scores. The `sigma` row
+describes that residual variation around their modelled expected scores.
 
-Gaussian backend defaults use observed outcome summaries as well as
-predictor scales. These are data-dependent reference choices, not fully
-data-independent substantive beliefs. flexbayes makes them explicit and
-uses the same resolved priors for plots, predictive checks, and eventual
-fitting.
+One detail deserves a pause: the intercept is **centered**. It describes
+the expected score at 5 study hours and 1 practice session, the training
+model-matrix column means, rather than at zero study hours.
+`summary(priors)` shows these reference values.
+
+There's a qualification: Gaussian backend defaults use observed outcome
+summaries and predictor scales. They are data-dependent references,
+rather than fully data-independent substantive beliefs. flexbayes makes
+them explicit and uses the same resolved priors for plots, predictive
+checks, and fitting.
 
 ## Express beliefs
 
 Suppose earlier research suggests that an extra study hour most
-plausibly adds 3 score points, holding practice sessions constant.
+plausibly adds 3 score points, holding practice sessions constant. We
+can say that directly:
 
 ```{r first-belief}
 priors = update(priors, parameter = "x", belief(mode = 3))
 print(priors)
 ```
 
-One mode does not determine a distribution's spread. The `Elicited*`
-label and footnote disclose that backend defaults helped resolve this
-underdetermination. That extra information is a reference choice, not a
-second belief you supplied.
+We've supplied a mode, but a narrow distribution around 3 and a very
+wide one could both satisfy it. The `Elicited*` asterisk tells us that
+backend defaults supplied reference information our belief left open.
+We didn't supply that extra information ourselves.
 
-Now suppose you would assign a 95% probability to the study-hour slope
-being below 6 points. Add that constraint:
+Let's add something about the uncertainty. Suppose we'd give a 95%
+probability to the study-hour slope being below 6 points:
 
 ```{r second-belief}
 priors = update(
@@ -98,33 +104,34 @@ priors = update(
 )
 ```
 
-`value` is a placeholder for the coefficient. A probability statement is
-a constraint on the prior, not a promise about 95% of students or
-observations. Beliefs accumulate; this update keeps the earlier mode
-belief.
+`value` stands for the coefficient. We're expressing uncertainty about
+the study-hour slope; we aren't saying that 95% of students gain fewer
+than 6 points. The earlier mode belief is still there. `update()` adds
+beliefs unless we tell it to remove them.
 
 ## Examine the selected prior
+
+Now let's see what distribution came out of those two statements.
 
 ```{r inspect}
 summary(priors, diagnostics = TRUE)
 plot(priors, parameter = "x")
 ```
 
-The summary lists numbered beliefs and compares their targets with
-achieved values. Acceptable candidates must satisfy every tolerance. The
-package ranks acceptable candidates and selects one that the backend can
-represent. With a parameter specified, the plot compares acceptable
-candidates and marks the selected one. It is a regular ggplot object, so
-you can add `ggplot2::theme_bw()`.
+The summary numbers our beliefs and compares requested and achieved
+values. Candidates must satisfy every tolerance. The package ranks
+acceptable candidates and selects one the backend can represent.
 
-The elicited study-hour prior is distinct from the unchanged defaults
-for other parameters. A good-looking density alone does not establish
-that the whole model implies reasonable predictions.
+The plot compares acceptable candidates for `x` and marks the selected
+one. It's a regular ggplot object; you can add `ggplot2::theme_bw()`.
+The other parameters still have their backend defaults. We'll need to
+think about those too: one reassuring density can't tell us what the
+whole model will predict.
 
-As an alternative, a researcher might think in standardized slopes: an
-increase of one predictor SD changes the expected response by some
-fraction of an outcome SD. Here is a separate specification using that
-language:
+You may find standardized slopes easier to think about. Instead of
+score points per study hour, we describe the change in expected score,
+in outcome SDs, for a one-SD increase in study hours. Here's a separate
+specification using that language:
 
 ```{r standardized}
 standardized = update(
@@ -135,14 +142,16 @@ standardized = update(
 print(standardized)
 ```
 
-Full standardization uses the observed sample SDs:
-`beta_star = beta * sd(x) / sd(y)`. flexbayes converts these beliefs to
-original coefficient units; it does not standardize the model data. This
-alternative does not replace `priors` in the rest of the tutorial.
+The conversion uses the observed sample SDs:
+`beta_star = beta * sd(x) / sd(y)`. flexbayes puts the beliefs into
+original coefficient units; the model data stay as they were. We saved
+this alternative as `standardized`, so we'll continue with our original
+`priors` below.
 
 ## What if the beliefs do not fit?
 
-Consider adding these two statements to our original study-hour prior:
+It's easy to write two statements that sound reasonable separately.
+Let's see what happens when we add these:
 
 ```{r contradictory}
 priors = update(
@@ -153,40 +162,46 @@ priors = update(
 summary(priors)
 ```
 
-Beliefs 3 and 4 assign a total probability of 1.90 to mutually exclusive
-regions. No distribution can satisfy them. The beliefs remain visible,
-and the parameter is marked contradictory instead of reverting to a
-default. Investigate what you meant; then remove or replace the
-problematic statements.
+Beliefs 3 and 4 put 95% probability below 0 and another 95% above 1.
+Those regions don't overlap. We're trying to allocate 1.90 worth of
+probability when there's only 1 to allocate.
+
+A different distribution won't rescue that. flexbayes keeps the beliefs
+visible and marks the contradiction instead of reverting to a default.
+We need to reconsider the statements. Here, we'll remove the two we added:
 
 ```{r repair}
 priors = update(priors, parameter = "x", remove = c(3, 4))
 print(priors)
 ```
 
-Removal uses the **current displayed numbers within that parameter**.
-Adding and removing beliefs can be combined in one update.
+The removal numbers are the **current displayed numbers within that
+parameter**. We can also remove beliefs and add replacements in the same
+update.
 
-Three situations deserve different responses:
+These failures can look similar on screen, but need different responses:
 
-- **Insufficient information:** defaults may provide a disclosed
-  reference; add a belief about spread or a probability to express more
-  of your knowledge.
-- **Contradiction:** the statements themselves conflict. Investigate and
-  revise them rather than discarding one automatically.
-- **No supported or compatible prior:** otherwise sensible statements
-  may not fit the available families, or may conflict with backend
-  restrictions. For example, rstanarm requires one shared slope-prior
-  family. Inspect the diagnostics; an unresolved parameter prevents
+- **Insufficient information:** we haven't said enough to determine a
+  prior. Defaults may supply a disclosed reference; a belief about
+  spread or a probability supplies more of our own knowledge.
+- **Contradiction:** our statements conflict with each other. We need to
+  investigate what we meant before revising them.
+- **No supported or compatible prior:** the statements may be sensible,
+  but the available families or backend can't represent them together.
+  For example, rstanarm requires one shared slope-prior family. The
+  diagnostics explain the problem; an unresolved parameter prevents
   predictive checking and fitting.
 
 ## Check what the priors imply
 
-A prior predictive check draws parameters from the **entire collection
-of selected priors**, then generates outcomes at predictor values you
-choose. It does not use fitted coefficients or posterior draws. Choose
-meaningful cases and assess their plausibility from substantive knowledge,
-not from how closely predictions reproduce the observed scores.
+So far we've examined individual coefficients. A prior predictive check
+draws from the **entire collection of selected priors** and generates
+outcomes at predictor values we choose. It uses no fitted coefficients
+or posterior draws.
+
+We'll compare study hours while keeping practice sessions fixed. Judge
+the scores using substantive knowledge, without tuning the priors to
+reproduce the observed outcomes.
 
 ```{r predictive}
 prediction_cases = data.frame(x = c(0, 2.5, 5, 7.5, 10), z = 2)
@@ -197,21 +212,24 @@ plot(check)
 ```
 
 The **Expected response** panel shows uncertainty about conditional mean
-scores. The **Individual observation** panel also includes residual
-variation. Both show medians and central 90% intervals. Prediction rows
-1--5 represent 0, 2.5, 5, 7.5, and 10 study hours, respectively, each with
-2 practice sessions. The horizontal axis labels cases, not study hours.
-Use `plot(check, type = "expected")` or `type = "simulated"` to inspect
-one panel alone. The same cases will be used after revising beliefs.
+scores. The **Individual observation** panel adds residual variation.
+Even if we knew the expected score precisely, individual students could
+still differ.
 
-Ask whether expected scores and individual scores are plausible over the
-study hours and practice sessions represented here. On a 0--100 test,
-very low or very high predictions invite a closer look. A Gaussian model
-is unbounded; narrowing priors cannot impose hard score limits.
+Both panels show medians and central 90% intervals. Rows 1--5 mean 0,
+2.5, 5, 7.5, and 10 study hours, each with 2 practice sessions. The axis
+labels cases, not hours. Use `plot(check, type = "expected")` or
+`type = "simulated"` to inspect one panel. We'll keep these cases for
+the next check.
 
-Suppose earlier studies also suggest an expected score near 65 at the
-centering reference, and a practice-session effect near 2 points.
-Express that knowledge and repeat the check:
+Look at the scores the model considers plausible. A score of 140 on a
+100-point test would stand out on a transcript. It would also be
+impossible. A Gaussian model is unbounded; narrower priors cannot impose
+hard score limits.
+
+We need a substantive reason to revise. Suppose earlier studies suggest
+an expected score near 65 at the centering reference and a
+practice-session effect near 2 points. We can add that knowledge:
 
 ```{r revise-predictive}
 revised = update(
@@ -227,20 +245,21 @@ revised_check = check_prior(revised, n = 500, newdata = prediction_cases)
 plot(revised_check)
 ```
 
-Compare expected-score uncertainty at the same predictor values. These
-additional beliefs narrow it in this example. Individual-observation
-intervals also contain residual variation, so they need not narrow by
-as much. Residual-scale elicitation is not yet supported: `sigma` retains
-exactly the same backend-default prior in both checks. Revise beliefs only
-when substantive knowledge justifies it, not to make predictions imitate
-the observed outcomes.
+Compare expected-score uncertainty at the same predictor values. The
+additional beliefs narrow it here. Individual-observation intervals need
+not shrink by as much: they still include residual variation. `sigma`
+has exactly the same backend-default prior in both checks; residual-scale
+elicitation isn't yet supported.
+
+Keep revising when substantive knowledge justifies it. The check helps
+us discover implications we hadn't considered, without tuning priors to
+imitate the outcomes already in front of us.
 
 ## Where to go next
 
-Once satisfied, you can inspect backend arguments with
-`as_rstanarm(revised)` and eventually fit the original model with
-`fit(revised)`. Neither operation is demonstrated here; no model fitting
-is needed to evaluate priors.
+Once satisfied, use `as_rstanarm(revised)` to inspect backend arguments
+and `fit(revised)` to fit the original model. We'll leave both for later.
+We haven't needed to fit a model to examine our priors.
 
 See [`identify_priors()`](../html/identify_priors.html),
 [`belief()`](../html/belief.html), [`update()` for prior
