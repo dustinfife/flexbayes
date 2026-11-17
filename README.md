@@ -472,3 +472,25 @@ floating-point display range are explicitly labeled rather than printed as
 ordinary zeros or infinities. Exponentiated Student's t summaries report no finite
 mean and no attained positive global mode, while still showing its median and
 central interval. Compact `print(p)` and ordinary summaries are unchanged.
+
+### Compose prior updates
+
+Use `update_priors()` with `+` to add beliefs for several parameters in one
+expression:
+
+```r
+priors = identify_priors(mpg ~ wt + hp, data = mtcars) +
+  update_priors("wt", belief(mode = -3), belief(sd = 1)) +
+  update_priors("hp", belief(mode = -.03))
+```
+
+`update_priors()` constructs a reusable parameter-specific specification; it
+does not fit or change a prior object by itself. You can also write
+`revised = priors + update_priors("wt", belief(value < 0, probability = .95))`.
+Beliefs accumulate, and both the original priors and the specification retain
+normal R value semantics. This syntax delegates to `update()` and preserves its
+validation, rankings, compatibility checks and unresolved-prior behavior. It does
+not discard or approximate constraints that the supported families cannot fit.
+Use a prior object on the left and a specification on the right; chain additional
+specifications the same way. The existing `update()` interface, including belief
+removal, remains available.
