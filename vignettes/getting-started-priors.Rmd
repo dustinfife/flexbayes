@@ -195,7 +195,12 @@ plot(check, type = "interval")
 
 By default, `plot(check)` shows the distribution of simulated scores. Here
 we asked for interval panels so we can compare the two kinds of uncertainty.
-Use `plot(check, type = "model")` to examine prior-drawn relationships.
+Use `plot(check, type = "model")` to see the median expected relationship and
+a central 90% prior interval, based on all the stored draws. This band describes
+uncertainty about expected scores, not differences between individual students.
+Add `display = "draws"` to see individual relationships, or `display = "both"`
+to show them alongside the band. The `draws` argument limits the individual
+curves, not the draws used for the interval.
 
 The **Expected outcome** panel shows uncertainty about conditional mean
 scores. The **Predicted outcome** panel adds residual variation.

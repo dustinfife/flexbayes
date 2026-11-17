@@ -159,7 +159,9 @@ set.seed(42)
 checks = check_prior(p, n = 1000)
 plot(checks) + ggplot2::theme_bw()
 plot(checks, type = "outcome", response = "expected")
-plot(checks, type = "model")
+plot(checks, type = "model") # median and central 90% prior interval
+plot(checks, type = "model", display = "draws", draws = 30)
+plot(checks, type = "model", display = "both", draws = 10)
 # Optional conditioning formula (use your own predictor names):
 # plot(checks, type = "model", formula = price ~ sqft | bedrooms)
 plot(checks, type = "interval")
@@ -185,10 +187,17 @@ no fitted coefficients or posterior distributions are used.
 
 The default plot pools stored simulated outcomes across the supplied predictor
 configurations. Use `response = "expected"` for conditional means. Model plots
-use flexplot's public preparation and draw-aware renderer to show 30 coherent
-prior relationships by default, with observed points hidden. They require the
-updated flexplot interfaces (`prepare_flexplot()` and `prediction.draw`). Omitted
-predictors use flexplot reference profiles; predictor transformations and original
+use flexplot's preparation and draw-aware renderer, with observed points hidden.
+By default they show the median expected response and pointwise central 90%
+prior interval, calculated on the response scale using all stored draws. Use
+`display = "draws"` for the original individual relationships, or `"both"`
+for intervals and faint individual curves. `draws` limits only individual curves
+(default 30). Categorical x axes use median points and vertical interval bars.
+These intervals describe expected responses, not individual observations or
+posterior estimates. The adapter reuses returned prediction-layer mappings and
+positions to preserve native binning, facets and categorical offsets. Model plots
+require the updated flexplot interfaces (`prepare_flexplot()` and
+`prediction.draw`). Omitted predictors use flexplot reference profiles; predictor transformations and original
 contrasts are retained. Plotting generates no fresh parameter or outcome draws.
 The current public flexplot renderer still lets hidden observed responses expand
 model-plot y axes; prediction-only axis training requires a flexplot extension.

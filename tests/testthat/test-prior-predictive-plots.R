@@ -46,13 +46,13 @@ test_that("public renderer handles numeric, categorical and conditioned prior dr
     x = renderer_check(family)
     for (formula in list(NULL, y ~ x, y ~ g, y ~ x + g, y ~ x | z, y ~ x | g, y ~ g + x | z)) {
       before = x
-      p = plot(x, type = "model", formula = formula, draws = 30)
+      p = plot(x, type = "model", display = "draws", formula = formula, draws = 30)
       expect_s3_class(p + ggplot2::theme_bw(), "ggplot")
       expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
       expect_identical(x, before)
       expect_false(any(vapply(p$layers, function(layer) inherits(layer$stat, "StatSmooth"), logical(1))))
     }
-    p = plot(x, type = "model", formula = y ~ x | z, response = "simulated", draws = 4)
+    p = plot(x, type = "model", display = "draws", formula = y ~ x | z, response = "simulated", draws = 4)
     expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
     stored = p$data
     expect_equal(stored$y, as.vector(x$simulated[unique(stored$.prior_draw), , drop = FALSE]))
@@ -72,7 +72,7 @@ test_that("new grids preserve contrasts, transformations and coherent coefficien
     values = prior_model_expected(x, prep$grid, ids)
     design = prior_model_grid_matrix(x, prep$grid)
     expect_equal(values, x$coefficient_draws[ids, , drop = FALSE] %*% t(design))
-    p = plot(x, type = "model", formula = y ~ x | g, draws = 3)
+    p = plot(x, type = "model", display = "draws", formula = y ~ x | g, draws = 3)
     expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
   }
   x = renderer_check(formula = y ~ x + g)
@@ -86,20 +86,20 @@ test_that("model curves use stored draws, not observed outcomes or new RNG draws
   x = renderer_check()
   set.seed(52)
   rng = .Random.seed
-  p = plot(x, type = "model", formula = y ~ x, draws = 30)
+  p = plot(x, type = "model", display = "draws", formula = y ~ x, draws = 30)
   expect_identical(.Random.seed, rng)
   # Raw observations are hidden; flexplot may preserve their axis extent.
   expect_equal(nrow(p$layers[[1]]$data), 0L)
   altered = x
   altered$metadata$prediction_data$y = 1e50
-  q = plot(altered, type = "model", formula = y ~ x, draws = 30)
+  q = plot(altered, type = "model", display = "draws", formula = y ~ x, draws = 30)
   lines = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomLine"), logical(1)))
   expect_equal(ggplot2::ggplot_build(p)$data[[lines[1]]]$y,
     ggplot2::ggplot_build(q)$data[[lines[1]]]$y)
   # Predictor-only newdata is valid: preparation uses stored expected medians.
   priors = prior_example()
   new = check_prior(priors, 10, data.frame(x = c(1, 3, 5), g = c("a", "b", "a")))
-  expect_s3_class(ggplot2::ggplotGrob(plot(new, type = "model", formula = y ~ x)), "gtable")
+  expect_s3_class(ggplot2::ggplotGrob(plot(new, type = "model", display = "draws", formula = y ~ x)), "gtable")
 })
 
 test_that("interval aliases and malformed requests remain informative", {
@@ -109,17 +109,17 @@ test_that("interval aliases and malformed requests remain informative", {
   expect_error(plot(x, max_display = 0), "positive integer")
   expect_error(plot(x, response = "wrong"))
   require_draw_renderer()
-  expect_error(plot(x, type = "model", formula = y ~ missing), "Visualization variables")
-  expect_error(plot(x, type = "model", formula = y ~ log(x)), "untransformed visualization")
-  expect_error(plot(x, type = "model", draws = 0), "positive integer")
-  expect_error(plot(x, type = "model", prediction.alpha = 2), "between zero and one")
-  expect_error(plot(x, type = "model", response = "simulated", max_display = 2), "Too many prediction cases")
+  expect_error(plot(x, type = "model", display = "draws", formula = y ~ missing), "Visualization variables")
+  expect_error(plot(x, type = "model", display = "draws", formula = y ~ log(x)), "untransformed visualization")
+  expect_error(plot(x, type = "model", display = "draws", draws = 0), "positive integer")
+  expect_error(plot(x, type = "model", display = "draws", prediction.alpha = 2), "between zero and one")
+  expect_error(plot(x, type = "model", display = "draws", response = "simulated", max_display = 2), "Too many prediction cases")
 })
 
 test_that("30-draw conditioned smoke plot preserves paths and custom contrasts", {
   require_draw_renderer()
   x = renderer_check()
-  p = plot(x, type = "model", formula = y ~ x | z, draws = 30)
+  p = plot(x, type = "model", display = "draws", formula = y ~ x | z, draws = 30)
   built = ggplot2::ggplot_build(p)
   lines = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomLine"), logical(1)))
   paths = built$data[[lines[1]]]
@@ -131,7 +131,7 @@ test_that("30-draw conditioned smoke plot preserves paths and custom contrasts",
   prep = prior_model_preparation(check, y ~ x | g, 3, NULL, NULL)
   design = model.matrix(delete.response(check$metadata$terms), prep$grid, contrasts.arg = check$metadata$contrasts)
   expect_equal(prior_model_expected(check, prep$grid, 1:3), check$coefficient_draws %*% t(design))
-  expect_s3_class(ggplot2::ggplotGrob(plot(check, type = "model", formula = y ~ x | g)), "gtable")
+  expect_s3_class(ggplot2::ggplotGrob(plot(check, type = "model", display = "draws", formula = y ~ x | g)), "gtable")
 })
 
 
@@ -185,7 +185,7 @@ test_that("model labels count actually displayed joint draws and apply theme_bw"
     x = renderer_check(family)
     before = x
     for (count in c(5, 30, 100)) {
-      p = plot(x, type = "model", formula = y ~ x | z, draws = count)
+      p = plot(x, type = "model", display = "draws", formula = y ~ x | z, draws = count)
       expect_equal(p$labels$title, "Expected relationship based on priors")
       expect_equal(p$labels$y, "y")
       expect_equal(p$labels$caption, paste("Based on", min(count, 40), "prior draws."))
@@ -193,7 +193,7 @@ test_that("model labels count actually displayed joint draws and apply theme_bw"
       expect_equal(p$theme, ggplot2::theme_bw())
       expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
     }
-    p = plot(x, type = "model", formula = y ~ x | z, response = "simulated", max_display = 72)
+    p = plot(x, type = "model", display = "draws", formula = y ~ x | z, response = "simulated", max_display = 72)
     expect_equal(p$labels$title, "Simulated outcomes based on priors")
     expect_equal(p$labels$caption, "Based on 2 prior draws.")
     expect_equal(p$theme, ggplot2::theme_bw())
@@ -232,8 +232,8 @@ test_that("model y axes are independent of observed outcome outliers", {
   expect_identical(x$expected, altered$expected)
   expect_identical(x$metadata$prediction_data[c("x", "z", "g")],
     altered$metadata$prediction_data[c("x", "z", "g")])
-  p = ggplot2::ggplot_build(plot(x, type = "model", formula = y ~ x | z))
-  q = ggplot2::ggplot_build(plot(altered, type = "model", formula = y ~ x | z))
+  p = ggplot2::ggplot_build(plot(x, type = "model", display = "draws", formula = y ~ x | z))
+  q = ggplot2::ggplot_build(plot(altered, type = "model", display = "draws", formula = y ~ x | z))
   expect_equal(lapply(p$layout$panel_params, function(panel) panel$y.range),
     lapply(q$layout$panel_params, function(panel) panel$y.range))
 })
@@ -245,7 +245,7 @@ test_that("model plots repeat the original observed range across facets and grou
     before = x
     for (formula in list(y ~ x | z, y ~ g + x | z, y ~ g | z)) {
       for (response in c("expected", "simulated")) {
-        p = plot(x, type = "model", formula = formula, response = response, draws = 4)
+        p = plot(x, type = "model", display = "draws", formula = formula, response = response, draws = 4)
         index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline") && ".observed_value" %in% names(layer$data), logical(1)))
         expect_length(index, 1)
         layer = p$layers[[index]]
@@ -294,13 +294,13 @@ test_that("newdata response values never replace original observed range referen
   expect_identical(b$metadata$observed_response, original)
   expect_identical(a$coefficient_draws, b$coefficient_draws)
   expect_identical(a$expected, b$expected)
-  p = plot(a, type = "model", formula = y ~ x)
+  p = plot(a, type = "model", display = "draws", formula = y ~ x)
   index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline") && ".observed_value" %in% names(layer$data), logical(1)))
   expect_equal(p$layers[[index]]$data$.observed_value, range(original))
   # Finite but irrelevant newdata outcomes can affect flexplot's preparation,
   # but they must never be used as the original observed reference range.
   b$metadata$prediction_data$y = c(-1e6, 0, 1e6)
-  q = plot(b, type = "model", formula = y ~ x)
+  q = plot(b, type = "model", display = "draws", formula = y ~ x)
   expect_equal(q$layers[[index]]$data$.observed_value, range(original))
 })
 
@@ -308,19 +308,171 @@ test_that("observed references safely handle invalid, constant and legacy observ
   require_draw_renderer()
   x = renderer_check()
   x$metadata$observed_response = c(NA, NaN, -Inf, Inf, -3, 7)
-  p = plot(x, type = "model", formula = y ~ x)
+  p = plot(x, type = "model", display = "draws", formula = y ~ x)
   index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline") && ".observed_value" %in% names(layer$data), logical(1)))
   expect_equal(p$layers[[index]]$data$.observed_value, c(-3, 7))
   x$metadata$observed_response = rep(2, 3)
-  p = plot(x, type = "model", formula = y ~ x)
+  p = plot(x, type = "model", display = "draws", formula = y ~ x)
   expect_equal(p$layers[[index]]$data$.observed_value, c(2, 2))
   expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
   x$metadata$observed_response = c(NA, Inf)
-  expect_warning({ p = plot(x, type = "model", formula = y ~ x) }, "No finite original")
+  expect_warning({ p = plot(x, type = "model", display = "draws", formula = y ~ x) }, "No finite original")
   expect_false(any(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline"), logical(1))))
   x$metadata$observed_response = NULL
-  p = plot(x, type = "model", formula = y ~ x)
+  p = plot(x, type = "model", display = "draws", formula = y ~ x)
   expect_equal(p$layers[[index]]$data$.observed_value, range(x$metadata$prediction_data$y))
   x$metadata$newdata = TRUE
-  expect_warning(plot(x, type = "model", formula = y ~ x), "rerun check_prior")
+  expect_warning(plot(x, type = "model", display = "draws", formula = y ~ x), "rerun check_prior")
+})
+
+prior_band_layers = function(p, geom) {
+  Filter(function(layer) inherits(layer$geom, geom) && is.data.frame(layer$data) &&
+    all(c(".prior_lower", ".prior_upper") %in% names(layer$data)), p$layers)
+}
+
+test_that("prior intervals use response-scale quantiles from every coherent parameter draw", {
+  require_draw_renderer()
+  for (family in list(gaussian(), binomial(), poisson())) {
+    x = renderer_check(family)
+    prep = prior_model_preparation(x, y ~ x | z, 3, NULL, NULL)
+    X = model.matrix(delete.response(x$metadata$terms), prep$grid,
+      contrasts.arg = x$metadata$contrasts, xlev = x$metadata$factor_levels)
+    linear = x$coefficient_draws %*% t(X)
+    values = switch(family$family, gaussian = linear, binomial = plogis(linear), poisson = exp(linear))
+    expected = t(apply(values, 2, quantile, probs = c(.05, .5, .95), names = FALSE))
+    summary = prior_model_summary(x, prep$grid, 100000)
+    expect_equal(summary$prediction, unname(expected[, 2]))
+    expect_equal(summary$.prior_lower, unname(expected[, 1]))
+    expect_equal(summary$.prior_upper, unname(expected[, 3]))
+    # Very small batches still use all draws, even when a column exceeds budget.
+    expect_equal(prior_model_summary(x, prep$grid, 3), summary)
+    subset = t(apply(values[c(1, 11, 21, 30, 40), , drop = FALSE], 2, quantile,
+      probs = c(.05, .5, .95), names = FALSE))
+    expect_false(isTRUE(all.equal(expected, subset)))
+    p = plot(x, type = "model", formula = y ~ x | z)
+    band = prior_band_layers(p, "GeomRibbon")[[1]]
+    expect_equal(band$data$prediction, summary$prediction)
+    expect_equal(band$data$.prior_lower, summary$.prior_lower)
+    expect_equal(band$data$.prior_upper, summary$.prior_upper)
+    expect_equal(p$labels$caption, "Median and central 90% prior interval; 40 prior draws.")
+  }
+})
+
+test_that("displayed curve count never changes prior interval summaries", {
+  require_draw_renderer()
+  x = renderer_check()
+  before = x
+  set.seed(12)
+  rng = .Random.seed
+  for (display in c("interval", "both")) {
+    a = plot(x, type = "model", formula = y ~ x | z, display = display, draws = 5)
+    b = plot(x, type = "model", formula = y ~ x | z, display = display, draws = 30)
+    expect_equal(prior_band_layers(a, "GeomRibbon")[[1]]$data,
+      prior_band_layers(b, "GeomRibbon")[[1]]$data)
+    expect_equal(prior_band_layers(a, "GeomLine")[[1]]$data,
+      prior_band_layers(b, "GeomLine")[[1]]$data)
+    if (display == "both") {
+      curves = function(p) Filter(function(layer) inherits(layer$geom, "GeomLine") &&
+        !".prior_lower" %in% names(layer$data), p$layers)[[1]]$data
+      expect_length(unique(curves(a)$.prior_draw), 5)
+      expect_length(unique(curves(b)$.prior_draw), 30)
+      expect_match(a$labels$caption, "40 draws; 5 individual draws")
+      expect_match(b$labels$caption, "40 draws; 30 individual draws")
+    }
+  }
+  expect_identical(.Random.seed, rng)
+  expect_identical(x, before)
+  expect_equal(plot(x, type = "model")$labels$caption,
+    plot(x, type = "model", display = "interval")$labels$caption)
+  expect_error(plot(x, type = "model", display = "wrong"), "arg")
+})
+
+test_that("summary overlays reuse native grouping, binning, facets and categorical slots", {
+  require_draw_renderer()
+  for (family in list(gaussian(), binomial(), poisson())) {
+    x = renderer_check(family)
+    before = x
+    for (formula in list(NULL, y ~ x, y ~ x + g, y ~ x | z, y ~ x | z + g,
+      y ~ x + z | g, y ~ g, y ~ g + x | z)) {
+      prep = prior_model_preparation(x, formula, 3, NULL, NULL)
+      numeric_x = is.numeric(prep$plot_data[[prep$display_roles$x]])
+      for (display in c("interval", "both")) {
+        p = plot(x, type = "model", formula = formula, display = display, draws = 5)
+        expect_equal(p$theme, ggplot2::theme_bw())
+        expect_equal(p$labels$title, "Expected relationship based on priors")
+        expect_equal(p$labels$y, "y")
+        median = prior_band_layers(p, if (numeric_x) "GeomLine" else "GeomPoint")[[1]]
+        expect_true(median$show.legend)
+        expect_warning({ built = ggplot2::ggplot_build(p) }, NA)
+        expect_warning({ grob = ggplot2::ggplotGrob(p) }, NA)
+        expect_s3_class(grob, "gtable")
+        expect_length(prior_band_layers(p, if (numeric_x) "GeomRibbon" else "GeomLinerange"), 1)
+        if (!numeric_x) {
+          expect_length(prior_band_layers(p, "GeomLine"), 0)
+          point_index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomPoint") &&
+            ".prior_lower" %in% names(layer$data), logical(1)))
+          bar_index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomLinerange"), logical(1)))
+          expect_equal(built$data[[point_index]]$x, built$data[[bar_index]]$x)
+          expect_equal(built$data[[point_index]]$colour, built$data[[bar_index]]$colour)
+          # Compare positions against flexplot's own prediction points, not
+          # against an independently reconstructed dodge algorithm.
+          summary = prior_model_summary(x, prep$grid, 100000)
+          summary$.summary = 1L
+          template = prior_model_render(prep, prep$data, summary, ".summary", 1, "expected")
+          template_index = which(vapply(template$layers, function(layer) inherits(layer$geom, "GeomPoint") &&
+            ".prior_lower" %in% names(layer$data), logical(1)))
+          native = ggplot2::ggplot_build(template)$data[[template_index]]
+          expect_equal(built$data[[point_index]]$x, native$x)
+          expect_equal(built$data[[point_index]]$PANEL, native$PANEL)
+        }
+        ref = Filter(function(layer) inherits(layer$geom, "GeomHline") &&
+          ".observed_value" %in% names(layer$data), p$layers)[[1]]
+        expect_equal(ref$data$.observed_value, range(x$metadata$observed_response))
+      }
+    }
+    expect_identical(x, before)
+  }
+})
+
+test_that("summary intervals retain transformed designs, interactions and factor contrasts", {
+  require_draw_renderer()
+  for (formula in list(y ~ x * g + z, y ~ log(x + 2) + g, y ~ poly(x, 2) + g)) {
+    x = renderer_check(formula = formula)
+    p = plot(x, type = "model", formula = y ~ x | g)
+    prep = prior_model_preparation(x, y ~ x | g, 3, NULL, NULL)
+    X = model.matrix(delete.response(x$metadata$terms), prep$grid, contrasts.arg = x$metadata$contrasts)
+    expected = t(apply(x$coefficient_draws %*% t(X), 2, quantile, c(.05, .5, .95)))
+    band = prior_band_layers(p, "GeomRibbon")[[1]]$data
+    expect_equal(band$prediction, unname(expected[, 2]))
+    expect_equal(band$.prior_lower, unname(expected[, 1]))
+    expect_equal(band$.prior_upper, unname(expected[, 3]))
+    expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
+  }
+  d = data.frame(y = rep(c(0, 1, 0), 12), x = seq(-1, 1, length.out = 36), g = factor(rep(c("a", "b", "c"), 12)))
+  contrasts(d$g) = contr.sum(3)
+  priors = identify_priors(y ~ x * g, d)
+  x = check_prior(priors, 40)
+  prep = prior_model_preparation(x, y ~ x | g, 3, NULL, NULL)
+  X = prior_model_grid_matrix(x, prep$grid)
+  expected = t(apply(x$coefficient_draws %*% t(X), 2, quantile, c(.05, .5, .95)))
+  p = plot(x, type = "model", formula = y ~ x | g)
+  expect_equal(prior_band_layers(p, "GeomRibbon")[[1]]$data$.prior_lower, unname(expected[, 1]))
+  expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
+  for (display in c("interval", "both")) {
+    expect_s3_class(ggplot2::ggplotGrob(plot(x, type = "model", formula = y ~ x,
+      response = "simulated", display = display)), "gtable")
+  }
+})
+
+test_that("singleton interval displays and unsupported layer contracts are handled clearly", {
+  require_draw_renderer()
+  priors = prior_example()
+  x = check_prior(priors, 1, data.frame(x = 3, g = "a"))
+  p = plot(x, type = "model", formula = y ~ x)
+  bars = prior_band_layers(p, "GeomLinerange")[[1]]$data
+  expect_equal(bars$.prior_lower, bars$prediction)
+  expect_equal(bars$.prior_upper, bars$prediction)
+  expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
+  prep = prior_model_preparation(x, y ~ x, 3, NULL, NULL)
+  expect_error(prior_model_summary_layers(ggplot2::ggplot(), prep), "Unsupported flexplot prediction-layer")
 })

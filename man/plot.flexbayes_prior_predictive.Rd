@@ -15,6 +15,7 @@
   bins = 3,
   breaks = NULL,
   labels = NULL,
+  display = c("interval", "draws", "both"),
   ...
 )
 }
@@ -29,7 +30,8 @@ or both (interval only; its default).}
 
 \item{formula}{Optional literal flexplot visualization formula for model plots.}
 
-\item{draws}{Maximum joint prior draws shown in model plots (default 30).}
+\item{draws}{Maximum individual joint prior draws shown in draws/both model
+displays (default 30); never limits draws used to calculate intervals.}
 
 \item{max_display}{Display budget for outcome values or model-grid rows.
 Outcome plots select evenly spaced matrix indices deterministically, retaining
@@ -39,6 +41,9 @@ Stored simulations are never changed. Interval plots retain all cases.}
 \item{prediction.alpha}{Opacity of prior relationships and simulated points.}
 
 \item{bins, breaks, labels}{Model-display binning controls passed to prepare_flexplot.}
+
+\item{display}{Model display: interval (default), draws, or both. Intervals
+summarize prior uncertainty in the expected response, not individual outcomes.}
 
 \item{...}{Reserved; unsupported arguments are rejected for new plot types.}
 }
@@ -53,8 +58,18 @@ Outcome plots pool across draws and the supplied predictor cases,
 not an arbitrary population. Continuous values use 30-bin histograms; simulated
 binary/count values use discrete proportion bars. All plots use theme_bw().
 Captions count joint parameter draws, not pooled outcome values. Model plots use public
-flexplot preparation contract 1 and prediction.draw rendering. Original
-contrasts, levels and transformation terms are used with stored coefficient
+flexplot preparation contract 1 and prediction.draw rendering. Summary
+displays calculate pointwise medians and 5th/95th percentiles using all stored
+joint coefficient draws, after the inverse link on the response scale. Numeric
+x uses a median line and translucent ribbon; categorical x uses median points
+and vertical intervals. Both adds the selected individual relationships.
+Intervals are pointwise prior intervals for expected responses, not
+simultaneous bands, posterior intervals, or individual-observation intervals.
+Plot-ready layers reuse flexplot's returned prediction mappings, binned data,
+and position objects; no binning or dodge logic is reconstructed. This small
+dependency on returned layer structure is guarded and covered by rendering
+tests. An unsupported layer structure errors and suggests display='draws'.
+Original contrasts, levels and transformation terms use stored coefficient
 draws; no model is fitted or new parameters/outcomes sampled.
 
 Model plots add subtle dashed lines labelled Observed minimum and Observed
@@ -82,7 +97,9 @@ Old saved checks need to be regenerated for model plotting.
 \dontrun{
 check = check_prior(priors, n = 500)
 plot(check, type = "outcome")
-plot(check, type = "model")
+plot(check, type = "model") # median and central 90\% prior interval
+plot(check, type = "model", display = "draws")
+plot(check, type = "model", display = "both")
 plot(check, type = "model", formula = price ~ sqft | bedrooms)
 plot(check, type = "interval")
 }

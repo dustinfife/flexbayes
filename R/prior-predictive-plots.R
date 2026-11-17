@@ -73,7 +73,7 @@ prior_model_draw_frame = function(grid, values, ids, draw_column) {
   data
 }
 
-prior_plot_model = function(x, response, formula, draws, max_display, alpha, bins, breaks, labels) {
+prior_plot_model = function(x, response, formula, draws, max_display, alpha, bins, breaks, labels, display) {
   rng = prior_plot_rng_state()
   on.exit(prior_restore_plot_rng(rng), add = TRUE)
   prior_display_integer(draws, "draws")
@@ -85,10 +85,8 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
     count = min(count, floor(max_display / nrow(prep$data)))
   }
   ids = prior_display_indices(nrow(x$coefficient_draws), count)
-  if (nrow(prep$grid) * length(ids) > max_display) stop("Prediction grid exceeds max_display; use fewer draws or a simpler visualization formula.")
-  values = prior_model_expected(x, prep$grid, ids)
+  if (nrow(prep$grid) * (if (display == "interval") 1 else length(ids)) > max_display) stop("Prediction grid exceeds max_display; use fewer draws or a simpler visualization formula.")
   draw_column = tail(make.unique(c(names(prep$grid), all.vars(prep$formula), ".prior_draw")), 1)
-  prediction = prior_model_draw_frame(prep$grid, values, ids, draw_column)
   data = prep$data
   if (response == "simulated") {
     data = data[rep(seq_len(nrow(data)), each = length(ids)), , drop = FALSE]
@@ -96,16 +94,34 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
     data[[draw_column]] = rep(ids, times = nrow(prep$data))
     data$.prior_observation = rep(seq_len(nrow(prep$data)), each = length(ids))
   }
-  p = flexplot::flexplot(prep$formula, data, prediction = prediction,
-    prediction.draw = draw_column, prediction.alpha = alpha,
-    bins = prep$binning$bins, breaks = prep$binning$breaks, labels = prep$binning$labels,
-    raw.data = response == "simulated", sample = if (response == "expected") 0 else Inf, suppress_smooth = TRUE, se = FALSE,
-    jitter = FALSE, alpha = alpha)
+  if (display == "draws") {
+    values = prior_model_expected(x, prep$grid, ids)
+    prediction = prior_model_draw_frame(prep$grid, values, ids, draw_column)
+    p = prior_model_render(prep, data, prediction, draw_column, alpha, response)
+  } else {
+    summary = prior_model_summary(x, prep$grid, max_display)
+    summary[[draw_column]] = 1L
+    template = prior_model_render(prep, data, summary, draw_column, 1, response)
+    overlay = prior_model_summary_layers(template, prep)
+    if (display == "interval") {
+      p = template
+      p$layers = p$layers[!vapply(p$layers, prior_model_summary_layer, logical(1))]
+    } else {
+      values = prior_model_expected(x, prep$grid, ids)
+      prediction = prior_model_draw_frame(prep$grid, values, ids, draw_column)
+      p = prior_model_render(prep, data, prediction, draw_column, alpha, response)
+    }
+    # Bands go behind curves, medians remain prominent in front of them.
+    p$layers = c(overlay$interval, p$layers, overlay$median)
+  }
   p = prior_model_observed_range(p, x)
   p + ggplot2::theme_bw() + ggplot2::labs(
     title = if (response == "expected") "Expected relationship based on priors" else "Simulated outcomes based on priors",
     y = prior_plot_outcome_name(x), subtitle = NULL,
-    caption = prior_plot_draw_note(length(ids)))
+    caption = switch(display,
+      draws = prior_plot_draw_note(length(ids)),
+      interval = paste("Median and central 90% prior interval;", nrow(x$coefficient_draws), "prior draws."),
+      both = paste("Central 90% prior interval from", nrow(x$coefficient_draws), "draws;", length(ids), "individual draws shown.")))
 }
 
 prior_plot_rng_state = function() {
@@ -146,4 +162,76 @@ prior_model_observed_range = function(p, x) {
     ggplot2::geom_text(data = reference,
       ggplot2::aes(x = Inf, y = .observed_value, label = .observed_label, vjust = .observed_vjust),
       inherit.aes = FALSE, hjust = 1.05, colour = "grey45", size = 3, show.legend = FALSE)
+}
+
+prior_model_render = function(prep, data, prediction, draw_column, alpha, response) {
+  flexplot::flexplot(prep$formula, data, prediction = prediction,
+    prediction.draw = draw_column, prediction.alpha = alpha,
+    bins = prep$binning$bins, breaks = prep$binning$breaks, labels = prep$binning$labels,
+    raw.data = response == "simulated", sample = if (response == "expected") 0 else Inf,
+    suppress_smooth = TRUE, se = FALSE, jitter = FALSE, alpha = alpha)
+}
+
+prior_model_summary = function(x, grid, max_display) {
+  if (any(c(".prior_lower", ".prior_upper") %in% names(grid))) stop("Predictor names .prior_lower and .prior_upper are reserved for model interval metadata.")
+  ids = seq_len(nrow(x$coefficient_draws))
+  # Bound temporary prediction matrices without subsampling parameter draws.
+  batch = max(1, floor(max_display / length(ids)))
+  quantiles = matrix(NA_real_, nrow(grid), 3)
+  for (start in seq(1, nrow(grid), by = batch)) {
+    rows = seq.int(start, min(nrow(grid), start + batch - 1))
+    values = prior_model_expected(x, grid[rows, , drop = FALSE], ids)
+    quantiles[rows, ] = t(apply(values, 2, stats::quantile, probs = c(.05, .5, .95), names = FALSE))
+  }
+  grid$prediction = quantiles[, 2]
+  grid$.prior_lower = quantiles[, 1]
+  grid$.prior_upper = quantiles[, 3]
+  grid
+}
+
+prior_model_summary_layer = function(layer) {
+  is.data.frame(layer$data) && all(c(".prior_lower", ".prior_upper") %in% names(layer$data)) &&
+    (inherits(layer$geom, "GeomLine") || inherits(layer$geom, "GeomPoint"))
+}
+
+prior_model_summary_layers = function(template, prep) {
+  interval = median = list()
+  numeric_x = is.numeric(prep$plot_data[[prep$display_roles$x]])
+  # Reuse returned layer mappings, binned columns and position objects. This
+  # deliberately does not inspect private path names or recreate dodge slots.
+  # If flexplot changes its returned layer contract, fail rather than misplace
+  # intervals. Rendering tests cover this small object-structure dependency.
+  for (layer in Filter(prior_model_summary_layer, template$layers)) {
+    if (!nrow(layer$data)) next
+    line = inherits(layer$geom, "GeomLine")
+    if (!numeric_x && line) next
+    mapping = layer$mapping
+    bounds = mapping
+    bounds$ymin = ggplot2::aes(ymin = .prior_lower)$ymin
+    bounds$ymax = ggplot2::aes(ymax = .prior_upper)$ymax
+    bounds$shape = NULL
+    if (numeric_x && line) {
+      bounds$fill = bounds$colour
+      bounds$colour = bounds$linetype = NULL
+      interval[[length(interval) + 1L]] = prior_model_summary_geom(ggplot2::geom_ribbon,
+        layer, bounds, aesthetic = "fill", alpha = .15)
+      median[[length(median) + 1L]] = prior_model_summary_geom(ggplot2::geom_line,
+        layer, mapping, legend = TRUE, linewidth = .9)
+    } else {
+      bounds$linetype = NULL
+      interval[[length(interval) + 1L]] = prior_model_summary_geom(ggplot2::geom_linerange,
+        layer, bounds, linewidth = .6)
+      median[[length(median) + 1L]] = prior_model_summary_geom(ggplot2::geom_point,
+        layer, mapping, legend = TRUE, size = 2)
+    }
+  }
+  if (!length(median)) stop("Unsupported flexplot prediction-layer structure for prior intervals; use display = 'draws'.")
+  list(interval = interval, median = median)
+}
+
+prior_model_summary_geom = function(geom, layer, mapping, aesthetic = "colour", legend = FALSE, ...) {
+  args = list(data = layer$data, mapping = mapping, position = layer$position,
+    inherit.aes = FALSE, show.legend = legend, ...)
+  if (!is.null(layer$aes_params$colour)) args[[aesthetic]] = layer$aes_params$colour
+  do.call(geom, args)
 }

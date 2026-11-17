@@ -110,7 +110,10 @@ prior_simulate_gaussian = function(expected, sigma) {
 #' @param response simulated (default for outcome), expected (default for model),
 #'   or both (interval only; its default).
 #' @param formula Optional literal flexplot visualization formula for model plots.
-#' @param draws Maximum joint prior draws shown in model plots (default 30).
+#' @param draws Maximum individual joint prior draws shown in draws/both model
+#'   displays (default 30); never limits draws used to calculate intervals.
+#' @param display Model display: interval (default), draws, or both. Intervals
+#'   summarize prior uncertainty in the expected response, not individual outcomes.
 #' @param max_display Display budget for outcome values or model-grid rows.
 #'   Outcome plots select evenly spaced matrix indices deterministically, retaining
 #'   draw/case IDs; simulated model plots reduce draw count to fit all cases.
@@ -122,8 +125,18 @@ prior_simulate_gaussian = function(expected, sigma) {
 #'   not an arbitrary population. Continuous values use 30-bin histograms; simulated
 #'   binary/count values use discrete proportion bars. All plots use theme_bw().
 #'   Captions count joint parameter draws, not pooled outcome values. Model plots use public
-#'   flexplot preparation contract 1 and prediction.draw rendering. Original
-#'   contrasts, levels and transformation terms are used with stored coefficient
+#'   flexplot preparation contract 1 and prediction.draw rendering. Summary
+#'   displays calculate pointwise medians and 5th/95th percentiles using all stored
+#'   joint coefficient draws, after the inverse link on the response scale. Numeric
+#'   x uses a median line and translucent ribbon; categorical x uses median points
+#'   and vertical intervals. Both adds the selected individual relationships.
+#'   Intervals are pointwise prior intervals for expected responses, not
+#'   simultaneous bands, posterior intervals, or individual-observation intervals.
+#'   Plot-ready layers reuse flexplot's returned prediction mappings, binned data,
+#'   and position objects; no binning or dodge logic is reconstructed. This small
+#'   dependency on returned layer structure is guarded and covered by rendering
+#'   tests. An unsupported layer structure errors and suggests display='draws'.
+#'   Original contrasts, levels and transformation terms use stored coefficient
 #'   draws; no model is fitted or new parameters/outcomes sampled.
 #'
 #'   Model plots add subtle dashed lines labelled Observed minimum and Observed
@@ -151,14 +164,17 @@ prior_simulate_gaussian = function(expected, sigma) {
 #' \dontrun{
 #' check = check_prior(priors, n = 500)
 #' plot(check, type = "outcome")
-#' plot(check, type = "model")
+#' plot(check, type = "model") # median and central 90% prior interval
+#' plot(check, type = "model", display = "draws")
+#' plot(check, type = "model", display = "both")
 #' plot(check, type = "model", formula = price ~ sqft | bedrooms)
 #' plot(check, type = "interval")
 #' }
 #' @export
 plot.flexbayes_prior_predictive = function(x, type = c("outcome", "model", "interval", "both", "expected", "simulated"),
     response = NULL, formula = NULL, draws = 30, max_display = 100000,
-    prediction.alpha = .15, bins = 3, breaks = NULL, labels = NULL, ...) {
+    prediction.alpha = .15, bins = 3, breaks = NULL, labels = NULL,
+    display = c("interval", "draws", "both"), ...) {
   type = match.arg(type)
   if (type %in% c("both", "expected", "simulated")) {
     if (!is.null(response)) stop("Do not combine a legacy interval alias with response.")
@@ -171,7 +187,7 @@ plot.flexbayes_prior_predictive = function(x, type = c("outcome", "model", "inte
   prior_display_integer(max_display, "max_display")
   if (length(list(...))) stop("Unsupported plotting arguments in ...; use the documented display controls.")
   if (type == "outcome") return(prior_plot_outcome(x, response, max_display))
-  prior_plot_model(x, response, formula, draws, max_display, prediction.alpha, bins, breaks, labels)
+  prior_plot_model(x, response, formula, draws, max_display, prediction.alpha, bins, breaks, labels, match.arg(display))
 }
 
 prior_plot_interval = function(x, type = "both") {
