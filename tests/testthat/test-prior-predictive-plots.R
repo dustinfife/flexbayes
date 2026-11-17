@@ -476,3 +476,52 @@ test_that("singleton interval displays and unsupported layer contracts are handl
   prep = prior_model_preparation(x, y ~ x, 3, NULL, NULL)
   expect_error(prior_model_summary_layers(ggplot2::ggplot(), prep), "Unsupported flexplot prediction-layer")
 })
+
+test_that("categorical prior draws keep native points without connecting categories", {
+  require_draw_renderer()
+  for (family in list(gaussian(), binomial(), poisson())) {
+    x = renderer_check(family)
+    before = x
+    for (formula in list(y ~ g, y ~ g | z, y ~ g + x | z)) {
+      prep = prior_model_preparation(x, formula, 3, NULL, NULL)
+      ids = prior_display_indices(nrow(x$coefficient_draws), 5)
+      values = prior_model_expected(x, prep$grid, ids)
+      prediction = prior_model_draw_frame(prep$grid, values, ids, ".prior_draw")
+      native = flexplot::flexplot(prep$formula, prep$data, prediction = prediction,
+        prediction.draw = ".prior_draw", prediction.alpha = .15,
+        bins = prep$binning$bins, breaks = prep$binning$breaks, labels = prep$binning$labels,
+        raw.data = FALSE, sample = 0, suppress_smooth = TRUE, se = FALSE, jitter = FALSE, alpha = .15)
+      native_index = which(vapply(native$layers, function(layer) inherits(layer$geom, "GeomPoint") &&
+        ".prior_draw" %in% names(layer$data), logical(1)))
+      native_points = ggplot2::ggplot_build(native)$data[[native_index]]
+      interval = plot(x, type = "model", formula = formula, display = "interval")
+      for (display in c("draws", "both")) {
+        p = plot(x, type = "model", formula = formula, display = display, draws = 5)
+        expect_false(any(vapply(p$layers, function(layer) inherits(layer$geom, "GeomLine"), logical(1))))
+        point_index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomPoint") &&
+          ".prior_draw" %in% names(layer$data) && !".prior_lower" %in% names(layer$data), logical(1)))
+        expect_length(point_index, 1)
+        points = p$layers[[point_index]]$data
+        expect_equal(points$.prior_draw, prediction$.prior_draw)
+        expect_equal(points$prediction, prediction$prediction)
+        expect_equal(sort(unique(points$.prior_draw)), ids)
+        built = ggplot2::ggplot_build(p)$data[[point_index]]
+        for (name in c("x", "y", "group", "colour", "PANEL")) expect_equal(built[[name]], native_points[[name]])
+        if (display == "both") {
+          expect_equal(prior_band_layers(p, "GeomPoint")[[1]]$data,
+            prior_band_layers(interval, "GeomPoint")[[1]]$data)
+          expect_equal(prior_band_layers(p, "GeomLinerange")[[1]]$data,
+            prior_band_layers(interval, "GeomLinerange")[[1]]$data)
+        }
+        expect_warning(ggplot2::ggplotGrob(p), NA)
+      }
+    }
+    expect_identical(x, before)
+    # The same draw layer remains a line for a continuous x axis.
+    for (display in c("draws", "both")) {
+      p = plot(x, type = "model", formula = y ~ x | z, display = display, draws = 5)
+      expect_true(any(vapply(p$layers, function(layer) inherits(layer$geom, "GeomLine") &&
+        !".prior_lower" %in% names(layer$data), logical(1))))
+    }
+  }
+})

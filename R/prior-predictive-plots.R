@@ -165,11 +165,17 @@ prior_model_observed_range = function(p, x) {
 }
 
 prior_model_render = function(prep, data, prediction, draw_column, alpha, response) {
-  flexplot::flexplot(prep$formula, data, prediction = prediction,
+  p = flexplot::flexplot(prep$formula, data, prediction = prediction,
     prediction.draw = draw_column, prediction.alpha = alpha,
     bins = prep$binning$bins, breaks = prep$binning$breaks, labels = prep$binning$labels,
     raw.data = response == "simulated", sample = if (response == "expected") 0 else Inf,
     suppress_smooth = TRUE, se = FALSE, jitter = FALSE, alpha = alpha)
+  if (is.numeric(prep$plot_data[[prep$display_roles$x]])) return(p)
+  # Keep native categorical points, mappings and dodge positions; only remove
+  # the companion prediction lines that connect separate categories.
+  p$layers = Filter(function(layer) !(inherits(layer$geom, "GeomLine") &&
+    is.data.frame(layer$data) && draw_column %in% names(layer$data)), p$layers)
+  p
 }
 
 prior_model_summary = function(x, grid, max_display) {

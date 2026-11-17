@@ -63,6 +63,8 @@ displays calculate pointwise medians and 5th/95th percentiles using all stored
 joint coefficient draws, after the inverse link on the response scale. Numeric
 x uses a median line and translucent ribbon; categorical x uses median points
 and vertical intervals. Both adds the selected individual relationships.
+Individual relationships use lines for numeric x and unconnected points
+for categorical x, retaining flexplot's native positions and draw identities.
 Intervals are pointwise prior intervals for expected responses, not
 simultaneous bands, posterior intervals, or individual-observation intervals.
 Plot-ready layers reuse flexplot's returned prediction mappings, binned data,
