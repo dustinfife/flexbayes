@@ -16,7 +16,8 @@ check_prior(object, n = 1000, newdata = NULL)
 \value{
 A flexbayes_prior_predictive object with draws-by-observations
 matrices expected and simulated, parameter_draws, coefficient_draws,
-the linear_predictor and prediction design matrix, and metadata.
+the linear_predictor and prediction design matrix, and metadata retaining
+prediction data, frozen model terms, factor levels and contrasts for plotting.
 }
 \description{
 Uses selected priors without posterior fitting. Backend defaults may depend

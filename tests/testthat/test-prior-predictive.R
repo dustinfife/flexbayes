@@ -37,7 +37,9 @@ test_that("newdata preserves training centering, factor levels and outcome indep
   expect_equal(a$metadata$reference, p$model$reference)
   new$y = c(1e10, -1e10)
   set.seed(2)
-  expect_equal(check_prior(p, n = 5, newdata = new), a)
+  b = check_prior(p, n = 5, newdata = new)
+  expect_equal(b[setdiff(names(b), "metadata")], a[setdiff(names(a), "metadata")])
+  expect_equal(b$metadata$prediction_data$y, new$y)
   expect_error(check_prior(p, newdata = data.frame(x = 1)), "missing predictors")
   expect_error(check_prior(p, newdata = data.frame(x = 1, g = "new")), "new level")
   expect_error(check_prior(p, newdata = data.frame(x = NA_real_, g = "a")))
@@ -66,9 +68,9 @@ test_that("t sampling uses selected scale and plots use the same mathematics", {
   rows = densities[densities$parameter == "x", ]
   expect_equal(rows$density, dt(rows$value, 7))
   expect_s3_class(plot(result) + ggplot2::theme_bw(), "ggplot")
-  expect_equal(length(unique(plot(result)$data$response)), 2)
-  expect_equal(unique(plot(result, type = "expected")$data$response), "Expected response")
-  expect_equal(unique(plot(result, type = "simulated")$data$response), "Individual observation")
+  expect_equal(length(unique(plot(result, type = "interval")$data$response)), 2)
+  expect_equal(unique(plot(result, type = "expected")$data$response), "Expected outcome")
+  expect_equal(unique(plot(result, type = "simulated")$data$response), "Predicted outcome")
   expect_s3_class(plot(check_prior(p, 1, data.frame(x = 0))), "ggplot")
 })
 

@@ -158,8 +158,11 @@ not change an existing belief.
 set.seed(42)
 checks = check_prior(p, n = 1000)
 plot(checks) + ggplot2::theme_bw()
-plot(checks, type = "expected")
-plot(checks, type = "simulated")
+plot(checks, type = "outcome", response = "expected")
+plot(checks, type = "model")
+# Optional conditioning formula (use your own predictor names):
+# plot(checks, type = "model", formula = price ~ sqft | bedrooms)
+plot(checks, type = "interval")
 # New predictor values need no response column:
 # checks = check_prior(p, n = 1000, newdata = predictor_grid)
 ```
@@ -180,9 +183,20 @@ The selected priors stay fixed when new data are supplied. Backend defaults
 may depend on the original observed mean and standard deviation of the outcome;
 no fitted coefficients or posterior distributions are used.
 
-The default plot separates expected responses from individual observations and
-shows medians and central 90% intervals at each prediction row. Row numbers are
-case identifiers, not a continuous predictor axis. `set.seed()` controls all
+The default plot pools stored simulated outcomes across the supplied predictor
+configurations. Use `response = "expected"` for conditional means. Model plots
+use flexplot's public preparation and draw-aware renderer to show 30 coherent
+prior relationships by default, with observed points hidden. They require the
+updated flexplot interfaces (`prepare_flexplot()` and `prediction.draw`). Omitted
+predictors use flexplot reference profiles; predictor transformations and original
+contrasts are retained. Plotting generates no fresh parameter or outcome draws.
+The current public flexplot renderer still lets hidden observed responses expand
+model-plot y axes; prediction-only axis training requires a flexplot extension.
+
+`type = "interval"` preserves the original medians and central 90% intervals
+for expected responses and individual observations. Its row numbers identify
+cases, not a continuous predictor axis. The legacy `type = "expected"`,
+`"simulated"`, and `"both"` remain interval aliases. `set.seed()` controls check
 sampling. Checks refuse contradictory, unselected, unsupported, improper,
 unsampleable or backend-incompatible prior specifications. Gaussian identity, binary logit and Poisson log checks are implemented; residual-scale elicitation remains unavailable.
 

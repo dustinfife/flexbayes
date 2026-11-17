@@ -11,7 +11,8 @@
 #' @param newdata Optional predictor data frame; no response is required.
 #' @return A flexbayes_prior_predictive object with draws-by-observations
 #'   matrices expected and simulated, parameter_draws, coefficient_draws,
-#'   the linear_predictor and prediction design matrix, and metadata.
+#'   the linear_predictor and prediction design matrix, and metadata retaining
+#'   prediction data, frozen model terms, factor levels and contrasts for plotting.
 #' @export
 check_prior = function(object, n = 1000, newdata = NULL) {
   if (!inherits(object, "flexbayes_priors")) stop("Supply a flexbayes_priors object.")
@@ -37,6 +38,9 @@ check_prior = function(object, n = 1000, newdata = NULL) {
       formula = object$model$formula, reference = object$model$reference,
       priors = object$selected, backend = object$backend,
       newdata = !is.null(newdata),
+      prediction_data = if (is.null(newdata)) object$model$data else as.data.frame(newdata),
+      terms = object$model$terms, contrasts = object$model$contrasts,
+      factor_levels = lapply(object$model$frame[vapply(object$model$frame, is.factor, logical(1))], levels),
       default_scaling = prior_default_description(object)))
   class(result) = "flexbayes_prior_predictive"
   result
@@ -98,16 +102,73 @@ prior_simulate_gaussian = function(expected, sigma) {
   expected + noise * sigma
 }
 
-#' Plot prior predictive intervals
+#' Plot prior predictive distributions and relationships
 #' @param x A flexbayes_prior_predictive object.
-#' @param type Show both expected-response uncertainty and individual-observation
-#'   variability (default), or only expected or simulated responses.
-#' @param ... Reserved.
-#' @return A ggplot object showing medians and central 90 percent intervals by
-#'   prediction row. Row order does not imply a continuous predictor.
+#' @param type Outcome distribution (default), model relationships, or interval
+#'   summaries. Legacy both, expected and simulated types remain interval aliases.
+#' @param response simulated (default for outcome), expected (default for model),
+#'   or both (interval only; its default).
+#' @param formula Optional literal flexplot visualization formula for model plots.
+#' @param draws Maximum joint prior draws shown in model plots (default 30).
+#' @param max_display Display budget for outcome values or model-grid rows.
+#'   Outcome plots select evenly spaced matrix indices deterministically, retaining
+#'   draw/case IDs; simulated model plots reduce draw count to fit all cases.
+#'   Stored simulations are never changed. Interval plots retain all cases.
+#' @param prediction.alpha Opacity of prior relationships and simulated points.
+#' @param bins,breaks,labels Model-display binning controls passed to prepare_flexplot.
+#' @param ... Reserved; unsupported arguments are rejected for new plot types.
+#' @details Outcome plots pool across draws and the supplied predictor cases,
+#'   not an arbitrary population. Continuous values use 30-bin histograms; simulated
+#'   binary/count values use discrete proportion bars. All plots use theme_bw().
+#'   Captions count joint parameter draws, not pooled outcome values. Model plots use public
+#'   flexplot preparation contract 1 and prediction.draw rendering. Original
+#'   contrasts, levels and transformation terms are used with stored coefficient
+#'   draws; no model is fitted or new parameters/outcomes sampled.
+#'
+#'   Observed points are hidden with raw.data=FALSE and sample=0 for expected
+#'   model plots. flexplot still retains its ordinary axis extent, category-order
+#'   conventions and categorical-binary predictor-case counts. Its current public
+#'   interface cannot train model y axes exclusively from predictions: hidden
+#'   observed responses can still expand the axis range. For predictor-only
+#'   newdata, stored expected medians supply the preparer's required outcome
+#'   column; no observed response is overwritten. Simulated mode overlays stored
+#'   observations at their actual cases with expected reference-profile curves.
+#'   Omitted predictors use flexplot's means/modal-level conventions. Thus the
+#'   curves are conditional profiles, not averages over the observations.
+#'
+#'   Intercept-only models have outcome/interval plots, not model paths. Transformed
+#'   responses, transformed visualization formulas, missing preparation rows,
+#'   excessive grids and unsupported flexplot configurations fail clearly.
+#'   Old saved checks need to be regenerated for model plotting.
+#' @return A genuine ggplot object. Plotting does not alter stored simulations.
+#' @examples
+#' \dontrun{
+#' check = check_prior(priors, n = 500)
+#' plot(check, type = "outcome")
+#' plot(check, type = "model")
+#' plot(check, type = "model", formula = price ~ sqft | bedrooms)
+#' plot(check, type = "interval")
+#' }
 #' @export
-plot.flexbayes_prior_predictive = function(x, type = c("both", "expected", "simulated"), ...) {
+plot.flexbayes_prior_predictive = function(x, type = c("outcome", "model", "interval", "both", "expected", "simulated"),
+    response = NULL, formula = NULL, draws = 30, max_display = 100000,
+    prediction.alpha = .15, bins = 3, breaks = NULL, labels = NULL, ...) {
   type = match.arg(type)
+  if (type %in% c("both", "expected", "simulated")) {
+    if (!is.null(response)) stop("Do not combine a legacy interval alias with response.")
+    response = type
+    type = "interval"
+  }
+  if (type == "interval") return(prior_plot_interval(x, if (is.null(response)) "both" else match.arg(response, c("both", "expected", "simulated"))))
+  if (is.null(response)) response = if (type == "model") "expected" else "simulated"
+  response = match.arg(response, c("expected", "simulated"))
+  prior_display_integer(max_display, "max_display")
+  if (length(list(...))) stop("Unsupported plotting arguments in ...; use the documented display controls.")
+  if (type == "outcome") return(prior_plot_outcome(x, response, max_display))
+  prior_plot_model(x, response, formula, draws, max_display, prediction.alpha, bins, breaks, labels)
+}
+
+prior_plot_interval = function(x, type = "both") {
   types = if (type == "both") c("expected", "simulated") else type
   rows = list()
   for (kind in types) {
@@ -115,10 +176,10 @@ plot.flexbayes_prior_predictive = function(x, type = c("both", "expected", "simu
     intervals = apply(values, 2, stats::quantile, probs = c(.05, .5, .95), names = FALSE)
     rows[[kind]] = data.frame(row = seq_len(ncol(values)), lower = intervals[1, ],
       median = intervals[2, ], upper = intervals[3, ],
-      response = if (kind == "expected") "Expected response" else "Individual observation")
+      response = if (kind == "expected") "Expected outcome" else "Predicted outcome")
   }
   ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = row, y = median)) +
     ggplot2::geom_linerange(ggplot2::aes(ymin = lower, ymax = upper), alpha = .5) +
-    ggplot2::geom_point() + ggplot2::facet_wrap(~response) +
-    ggplot2::labs(x = "Prediction row", y = switch(x$metadata$family$family, binomial = "Probability / binary response", poisson = "Expected count / count", "Response"), subtitle = "Prior predictive medians and central 90% intervals")
+    ggplot2::geom_point() + ggplot2::facet_wrap(~response) + ggplot2::theme_bw() +
+    ggplot2::labs(x = "Prediction row", y = switch(x$metadata$family$family, binomial = "Probability / binary response", poisson = "Expected count / count", "Response"), title = "Prior predictive intervals")
 }

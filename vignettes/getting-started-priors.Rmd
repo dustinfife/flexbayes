@@ -190,11 +190,15 @@ prediction_cases = data.frame(x = c(0, 2.5, 5, 7.5, 10), z = 2)
 prediction_cases
 set.seed(52)
 check = check_prior(priors, n = 500, newdata = prediction_cases)
-plot(check)
+plot(check, type = "interval")
 ```
 
-The **Expected response** panel shows uncertainty about conditional mean
-scores. The **Individual observation** panel adds residual variation.
+By default, `plot(check)` shows the distribution of simulated scores. Here
+we asked for interval panels so we can compare the two kinds of uncertainty.
+Use `plot(check, type = "model")` to examine prior-drawn relationships.
+
+The **Expected outcome** panel shows uncertainty about conditional mean
+scores. The **Predicted outcome** panel adds residual variation.
 Even if we knew the expected score precisely, individual students could
 still differ.
 
@@ -225,7 +229,7 @@ revised = update(
 )
 set.seed(52)
 revised_check = check_prior(revised, n = 500, newdata = prediction_cases)
-plot(revised_check)
+plot(revised_check, type = "interval")
 ```
 
 Compare expected-score uncertainty at the same predictor values. The

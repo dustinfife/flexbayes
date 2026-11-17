@@ -2,22 +2,83 @@
 % Please edit documentation in R/prior-predictive.R
 \name{plot.flexbayes_prior_predictive}
 \alias{plot.flexbayes_prior_predictive}
-\title{Plot prior predictive intervals}
+\title{Plot prior predictive distributions and relationships}
 \usage{
-\method{plot}{flexbayes_prior_predictive}(x, type = c("both", "expected", "simulated"), ...)
+\method{plot}{flexbayes_prior_predictive}(
+  x,
+  type = c("outcome", "model", "interval", "both", "expected", "simulated"),
+  response = NULL,
+  formula = NULL,
+  draws = 30,
+  max_display = 1e+05,
+  prediction.alpha = 0.15,
+  bins = 3,
+  breaks = NULL,
+  labels = NULL,
+  ...
+)
 }
 \arguments{
 \item{x}{A flexbayes_prior_predictive object.}
 
-\item{type}{Show both expected-response uncertainty and individual-observation
-variability (default), or only expected or simulated responses.}
+\item{type}{Outcome distribution (default), model relationships, or interval
+summaries. Legacy both, expected and simulated types remain interval aliases.}
 
-\item{...}{Reserved.}
+\item{response}{simulated (default for outcome), expected (default for model),
+or both (interval only; its default).}
+
+\item{formula}{Optional literal flexplot visualization formula for model plots.}
+
+\item{draws}{Maximum joint prior draws shown in model plots (default 30).}
+
+\item{max_display}{Display budget for outcome values or model-grid rows.
+Outcome plots select evenly spaced matrix indices deterministically, retaining
+draw/case IDs; simulated model plots reduce draw count to fit all cases.
+Stored simulations are never changed. Interval plots retain all cases.}
+
+\item{prediction.alpha}{Opacity of prior relationships and simulated points.}
+
+\item{bins, breaks, labels}{Model-display binning controls passed to prepare_flexplot.}
+
+\item{...}{Reserved; unsupported arguments are rejected for new plot types.}
 }
 \value{
-A ggplot object showing medians and central 90 percent intervals by
-prediction row. Row order does not imply a continuous predictor.
+A genuine ggplot object. Plotting does not alter stored simulations.
 }
 \description{
-Plot prior predictive intervals
+Plot prior predictive distributions and relationships
+}
+\details{
+Outcome plots pool across draws and the supplied predictor cases,
+not an arbitrary population. Continuous values use 30-bin histograms; simulated
+binary/count values use discrete proportion bars. All plots use theme_bw().
+Captions count joint parameter draws, not pooled outcome values. Model plots use public
+flexplot preparation contract 1 and prediction.draw rendering. Original
+contrasts, levels and transformation terms are used with stored coefficient
+draws; no model is fitted or new parameters/outcomes sampled.
+
+Observed points are hidden with raw.data=FALSE and sample=0 for expected
+model plots. flexplot still retains its ordinary axis extent, category-order
+conventions and categorical-binary predictor-case counts. Its current public
+interface cannot train model y axes exclusively from predictions: hidden
+observed responses can still expand the axis range. For predictor-only
+newdata, stored expected medians supply the preparer's required outcome
+column; no observed response is overwritten. Simulated mode overlays stored
+observations at their actual cases with expected reference-profile curves.
+Omitted predictors use flexplot's means/modal-level conventions. Thus the
+curves are conditional profiles, not averages over the observations.
+
+Intercept-only models have outcome/interval plots, not model paths. Transformed
+responses, transformed visualization formulas, missing preparation rows,
+excessive grids and unsupported flexplot configurations fail clearly.
+Old saved checks need to be regenerated for model plotting.
+}
+\examples{
+\dontrun{
+check = check_prior(priors, n = 500)
+plot(check, type = "outcome")
+plot(check, type = "model")
+plot(check, type = "model", formula = price ~ sqft | bedrooms)
+plot(check, type = "interval")
+}
 }
