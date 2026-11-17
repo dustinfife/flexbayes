@@ -57,6 +57,11 @@ flexplot preparation contract 1 and prediction.draw rendering. Original
 contrasts, levels and transformation terms are used with stored coefficient
 draws; no model is fitted or new parameters/outcomes sampled.
 
+Model plots add subtle dashed lines labelled Observed minimum and Observed
+maximum, using the original observed response range even with newdata.
+These global references repeat across facets and naturally train the y axis.
+Missing/nonfinite observations are ignored; when no original finite response
+is available, references are omitted with a warning.
 Observed points are hidden with raw.data=FALSE and sample=0 for expected
 model plots. flexplot still retains its ordinary axis extent, category-order
 conventions and categorical-binary predictor-case counts. Its current public

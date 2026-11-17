@@ -237,3 +237,90 @@ test_that("model y axes are independent of observed outcome outliers", {
   expect_equal(lapply(p$layout$panel_params, function(panel) panel$y.range),
     lapply(q$layout$panel_params, function(panel) panel$y.range))
 })
+
+test_that("model plots repeat the original observed range across facets and groups", {
+  require_draw_renderer()
+  for (family in list(gaussian(), binomial(), poisson())) {
+    x = renderer_check(family)
+    before = x
+    for (formula in list(y ~ x | z, y ~ g + x | z, y ~ g | z)) {
+      for (response in c("expected", "simulated")) {
+        p = plot(x, type = "model", formula = formula, response = response, draws = 4)
+        index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline") && ".observed_value" %in% names(layer$data), logical(1)))
+        expect_length(index, 1)
+        layer = p$layers[[index]]
+        expect_equal(layer$data$.observed_value, range(x$metadata$prediction_data$y))
+        expect_equal(layer$aes_params$linetype, "dashed")
+        expect_equal(layer$data$.observed_label, c("Observed minimum", "Observed maximum"))
+        built = ggplot2::ggplot_build(p)
+        references = built$data[[index]]
+        expect_equal(length(unique(references$PANEL)), 3L)
+        for (panel in unique(references$PANEL)) {
+          expect_equal(references$yintercept[references$PANEL == panel], range(x$metadata$observed_response))
+        }
+        # Removing our reference layers leaves every prediction curve unchanged.
+        without = p
+        without$layers = without$layers[-c(index, index + 1L)]
+        lines = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomLine"), logical(1)))
+        expect_equal(built$data[[lines[1]]]$y, ggplot2::ggplot_build(without)$data[[lines[1]]]$y)
+        for (panel in built$layout$panel_params) {
+          expect_lte(panel$y.range[1], min(x$metadata$observed_response))
+          expect_gte(panel$y.range[2], max(x$metadata$observed_response))
+        }
+        expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
+        expect_equal(p$theme, ggplot2::theme_bw())
+        expect_equal(p$labels$caption, "Based on 4 prior draws.")
+      }
+    }
+    expect_identical(x, before)
+    for (type in c("outcome", "interval")) {
+      p = plot(x, type = type)
+      expect_false(any(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline"), logical(1))))
+    }
+  }
+})
+
+test_that("newdata response values never replace original observed range references", {
+  require_draw_renderer()
+  priors = prior_example()
+  original = model.response(priors$model$frame)
+  newdata = data.frame(x = c(1, 3, 5), g = c("a", "b", "a"))
+  set.seed(12)
+  a = check_prior(priors, 10, newdata)
+  newdata$y = c(-1e6, NA, 1e6)
+  set.seed(12)
+  b = check_prior(priors, 10, newdata)
+  expect_identical(a$metadata$observed_response, original)
+  expect_identical(b$metadata$observed_response, original)
+  expect_identical(a$coefficient_draws, b$coefficient_draws)
+  expect_identical(a$expected, b$expected)
+  p = plot(a, type = "model", formula = y ~ x)
+  index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline") && ".observed_value" %in% names(layer$data), logical(1)))
+  expect_equal(p$layers[[index]]$data$.observed_value, range(original))
+  # Finite but irrelevant newdata outcomes can affect flexplot's preparation,
+  # but they must never be used as the original observed reference range.
+  b$metadata$prediction_data$y = c(-1e6, 0, 1e6)
+  q = plot(b, type = "model", formula = y ~ x)
+  expect_equal(q$layers[[index]]$data$.observed_value, range(original))
+})
+
+test_that("observed references safely handle invalid, constant and legacy observations", {
+  require_draw_renderer()
+  x = renderer_check()
+  x$metadata$observed_response = c(NA, NaN, -Inf, Inf, -3, 7)
+  p = plot(x, type = "model", formula = y ~ x)
+  index = which(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline") && ".observed_value" %in% names(layer$data), logical(1)))
+  expect_equal(p$layers[[index]]$data$.observed_value, c(-3, 7))
+  x$metadata$observed_response = rep(2, 3)
+  p = plot(x, type = "model", formula = y ~ x)
+  expect_equal(p$layers[[index]]$data$.observed_value, c(2, 2))
+  expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
+  x$metadata$observed_response = c(NA, Inf)
+  expect_warning({ p = plot(x, type = "model", formula = y ~ x) }, "No finite original")
+  expect_false(any(vapply(p$layers, function(layer) inherits(layer$geom, "GeomHline"), logical(1))))
+  x$metadata$observed_response = NULL
+  p = plot(x, type = "model", formula = y ~ x)
+  expect_equal(p$layers[[index]]$data$.observed_value, range(x$metadata$prediction_data$y))
+  x$metadata$newdata = TRUE
+  expect_warning(plot(x, type = "model", formula = y ~ x), "rerun check_prior")
+})

@@ -101,6 +101,7 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
     bins = prep$binning$bins, breaks = prep$binning$breaks, labels = prep$binning$labels,
     raw.data = response == "simulated", sample = if (response == "expected") 0 else Inf, suppress_smooth = TRUE, se = FALSE,
     jitter = FALSE, alpha = alpha)
+  p = prior_model_observed_range(p, x)
   p + ggplot2::theme_bw() + ggplot2::labs(
     title = if (response == "expected") "Expected relationship based on priors" else "Simulated outcomes based on priors",
     y = prior_plot_outcome_name(x), subtitle = NULL,
@@ -122,3 +123,27 @@ prior_plot_outcome_name = function(x) {
 }
 
 prior_plot_draw_note = function(count) paste("Based on", count, "prior draws.")
+
+prior_model_observed_range = function(p, x) {
+  observed = x$metadata$observed_response
+  # Older checks retain training outcomes only when no newdata was supplied.
+  if (is.null(observed) && identical(x$metadata$newdata, FALSE)) {
+    observed = x$metadata$prediction_data[[prior_plot_outcome_name(x)]]
+  }
+  if (is.null(observed)) {
+    warning("Original observed outcomes unavailable; rerun check_prior() to display the observed range.", call. = FALSE)
+    return(p)
+  }
+  observed = observed[is.finite(observed)]
+  if (!length(observed)) {
+    warning("No finite original observed outcomes; observed range references omitted.", call. = FALSE)
+    return(p)
+  }
+  reference = data.frame(.observed_value = range(observed),
+    .observed_label = c("Observed minimum", "Observed maximum"), .observed_vjust = c(1.2, -.4))
+  p + ggplot2::geom_hline(data = reference, ggplot2::aes(yintercept = .observed_value),
+    linetype = "dashed", colour = "grey45", linewidth = .4, alpha = .65, show.legend = FALSE) +
+    ggplot2::geom_text(data = reference,
+      ggplot2::aes(x = Inf, y = .observed_value, label = .observed_label, vjust = .observed_vjust),
+      inherit.aes = FALSE, hjust = 1.05, colour = "grey45", size = 3, show.legend = FALSE)
+}
