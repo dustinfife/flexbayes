@@ -10,6 +10,10 @@
 #'   centered intercept; odds_ratio for a plain logistic numeric slope or
 #'   rate_ratio for a plain Poisson numeric slope. Outcome means, modes and SDs constrain the induced
 #'   distribution, not a naively transformed link-scale moment.
+#' When supplied to update_outcome(), mean/mode and probability beliefs refer
+#' to the expected Gaussian response at the specified predictors, not an
+#' individual noisy observation. Joint reconciliation may relax original
+#' coefficient beliefs; their statements and diagnostics remain available.
 #' @return A prior_belief record.
 #' @export
 belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd = NULL, tolerance = 1e-6, scale = "original") {

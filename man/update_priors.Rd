@@ -21,6 +21,9 @@ same unresolved status as with update(); no constraints are discarded.
 Construct a reusable specification and add it to a prior object with \code{+}.
 Specifications do not fit distributions until applied. Addition delegates to
 the same machinery as update(), preserving existing beliefs and diagnostics.
+Expected-outcome specifications can be added with update_outcome(); these
+reconcile jointly and may explicitly relax coefficient beliefs. Updating a
+coefficient recomputes reconciliation from its coefficient-only baseline.
 Chain additions as \code{priors + update_priors(...) + update_priors(...)}.
 Addition requires a prior object on the left and a specification on the right;
 specifications are not combined independently of a prior object.

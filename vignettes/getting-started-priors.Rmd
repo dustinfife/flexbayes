@@ -251,6 +251,113 @@ Keep revising when substantive knowledge justifies it. The check helps
 us discover implications we hadn't considered, without tuning priors to
 imitate the outcomes already in front of us.
 
+## What if you know more about the outcome?
+
+Sometimes a house price is easier to think about than a price coefficient.
+You might know what a particular house ought to cost, without knowing how
+much of its price comes from floor area, age, or bedroom count.
+
+Suppose your original priors imply an expected price of $400,000 for a
+particular house, but you believe $350,000 is more plausible. Several
+coefficients could contribute to that $50,000 discrepancy. Assigning it all
+to the intercept would be arbitrary. Instead, flexbayes looks for a small
+collective change, measured relative to each coefficient's original
+uncertainty. A tightly concentrated prior generally resists change more
+than a diffuse one. Parameters do not move by equal amounts in their raw
+units.
+
+Here is a small, self-contained housing illustration. These are invented
+teaching data, not an analysis of real sale prices.
+
+```{r outcome-beliefs}
+houses = data.frame(
+  sqft = c(1200, 1800, 2100, 2500, 3000, 3300),
+  age = c(40, 20, 30, 10, 5, 25),
+  bedrooms = c(2, 3, 3, 4, 4, 5),
+  price = c(180000, 250000, 290000, 340000, 430000, 450000)
+)
+house_priors = identify_priors(price ~ sqft + age + bedrooms, houses)
+reconciled = house_priors + update_outcome(
+  at = list(sqft = 3000, age = 30, bedrooms = 3),
+  belief(mode = 450000),
+  belief(value < 350000, probability = .05)
+)
+print(reconciled)
+```
+
+These beliefs describe the **expected price** for that house. They do not
+include the extra variation among individual sale prices. The probability
+statement constrains uncertainty about that expected price; it can change
+coefficient SDs as well as their means. The residual-scale prior stays the
+same. Add another `update_outcome()` to describe another house; all outcome
+specifications are reconciled together against the original coefficient
+priors, rather than successively replacing them.
+
+The priorities are explicit: satisfy outcome beliefs within their stated
+tolerances, preserve explicitly elicited coefficient beliefs as closely as
+possible, and then minimize departure from the baseline joint prior.
+Backend defaults supply an anchor, not additional explicit beliefs. If a
+coefficient belief has to be relaxed, a warning says so. Its original
+statement is retained, and `summary(reconciled, diagnostics = TRUE)` shows
+its target, achieved value, and whether it still holds. Incompatible or
+numerically unresolved outcome specifications cannot be exported or fitted.
+
+Now inspect the implications, rather than treating optimization as evidence
+that the priors are substantively sensible:
+
+```{r outcome-belief-check}
+set.seed(28)
+house_check = check_prior(
+  reconciled, n = 1000,
+  newdata = data.frame(sqft = 3000, age = 30, bedrooms = 3)
+)
+plot(house_check, type = "outcome", response = "expected")
+```
+
+For a relationship across houses, use `plot(house_check, type = "model")`
+with a recent flexplot providing its public prediction renderer. A check
+built from a wider predictor grid is more informative than this one house.
+Use `response = "simulated"` to add individual-outcome variation; that is a
+different question from the beliefs above.
+
+### A little mathematics, if you want it
+
+With independent Normal priors, write the coefficient mean vector as
+$\boldsymbol\mu$ and its diagonal covariance matrix as $\Sigma$. At a
+specified predictor configuration, the model-matrix row $\mathbf{x}^T$
+uses the backend's centered-intercept convention. Then
+
+$$
+M=\mathbf{x}^T\boldsymbol\beta,\qquad
+E(M)=\mathbf{x}^T\boldsymbol\mu,\qquad
+\operatorname{Var}(M)=\mathbf{x}^T\Sigma\mathbf{x}.
+$$
+
+After prioritizing explicit beliefs, the preference criterion is
+$\mathrm{KL}(\text{adjusted prior}\;||\;\text{original prior})$. It measures
+both changes in location and changes in uncertainty in units of the
+original priors.
+
+For one **exact location constraint with variances held fixed**, the
+minimum-Mahalanobis solution is
+
+$$
+\boldsymbol\mu_{new}=\boldsymbol\mu_0+
+\frac{\Sigma_0\mathbf{x}}{\mathbf{x}^T\Sigma_0\mathbf{x}}
+(m-\mathbf{x}^T\boldsymbol\mu_0).
+$$
+
+That formula is a useful benchmark, not the solution to general
+mean-and-variance reconciliation. The general method uses numerical
+optimization and checks achieved beliefs against their tolerances.
+It currently requires Gaussian identity models, numeric predictors, and
+independent Normal coefficient priors. Independence is in the centered
+parameterization; categorical predictors, Student's t priors, and
+individual-outcome elicitation are not supported here. More general beliefs
+could require coefficient correlations that this initial method cannot
+represent. See the *Joint outcome elicitation: method and limitations*
+vignette for the optimization details.
+
 ## Other ways to express your beliefs
 
 You may find standardized slopes easier to think about. Instead of score

@@ -71,5 +71,6 @@ prior_select_compatible = function(object) {
   }
   object$backend$compatible = all(vapply(object$selected, Negate(is.null), logical(1))) &&
     length(unique(vapply(Filter(Negate(is.null), object$selected[slopes]), `[[`, character(1), "distribution"))) <= 1L
+  if (length(object$outcomes)) return(prior_joint_reconcile(object))
   object
 }

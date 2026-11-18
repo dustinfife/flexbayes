@@ -63,6 +63,9 @@ print.flexbayes_priors = function(x, ...) {
     if (identical(x$candidates[[name]]$status, "contradictory")) return("Contradictory")
     if (identical(x$candidates[[name]]$status, "backend_incompatible")) return("Incompatible")
     if (is.null(x$selected[[name]])) return("Unresolved")
+    if (!is.null(x$joint) && name %in% names(x$joint$problem$mean) &&
+        !isTRUE(all.equal(x$joint$baseline[[name]],x$selected[[name]])))
+      return(if (length(x$beliefs[[name]])) "Adjusted (elicited)" else "Adjusted (default)")
     if (!length(x$beliefs[[name]])) return("Backend default")
     if (isTRUE(x$candidates[[name]]$reference_used)) return("Elicited*")
     "Elicited"
@@ -72,13 +75,20 @@ print.flexbayes_priors = function(x, ...) {
     Source = unname(source), Beliefs = lengths(x$beliefs), row.names = NULL)
   print(table, row.names = FALSE, right = FALSE)
   if (any(source == "Elicited*")) prior_console_line("* Backend default used to resolve underdetermined beliefs.")
+  if (!is.null(x$joint)) cat("Outcome reconciliation:",x$joint$status,";",length(x$outcomes),"configuration(s).\n")
   invisible(x)
 }
 
 #' Summarize prior specifications
+#'
+#' Displays a compact prior table, original beliefs, relevant warnings and
+#' centered-intercept reference values. Joint outcome diagnostics distinguish
+#' satisfied and relaxed beliefs without replacing the original statements.
 #' @param object A prior specification.
 #' @param diagnostics Include constraint targets, achieved values, standardized
-#'   residuals, and candidate fit scores.
+#'   residuals, and candidate fit scores. Outcome reconciliation additionally
+#'   reports configurations, original and adjusted coefficient priors, relaxed
+#'   beliefs, KL direction, and numerical convergence diagnostics.
 #' @param ... Reserved.
 #' @return A summary.flexbayes_priors object, displayed by its print method.
 #' @export
@@ -89,6 +99,7 @@ summary.flexbayes_priors = function(object, diagnostics = FALSE, ...) {
 
 #' @export
 print.summary.flexbayes_priors = function(x, ...) {
+  if (!is.null(x$object$joint)) return(prior_joint_summary(x))
   object = x$object
   diagnostics = x$diagnostics
   print(object)

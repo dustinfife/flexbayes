@@ -6,6 +6,9 @@
 #' coefficient_draws contains the equivalent uncentered intercept. Expected
 #' responses use the identity, logistic, or exponential inverse link. Poisson
 #' simulation rejects nonfinite rates or rates above 1e8.
+#' Reconciled outcome priors use the same simulation machinery. Use
+#' response='expected' to examine beliefs without individual residual noise;
+#' simulated outcomes additionally include the unchanged residual-scale prior.
 #' @param object A flexbayes_priors object.
 #' @param n Number of simulations.
 #' @param newdata Optional predictor data frame; no response is required.
@@ -48,6 +51,7 @@ check_prior = function(object, n = 1000, newdata = NULL) {
 }
 
 prior_predictive_validate = function(object) {
+  prior_joint_validate(object)
   prior_validate_standardized_beliefs(object)
   required = prior_required_parameters(object)
   if (!all(required %in% names(object$selected))) stop("Required prior is missing.")

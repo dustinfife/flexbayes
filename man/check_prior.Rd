@@ -26,4 +26,7 @@ with newdata. Parameter draws retain the centered intercept, while
 coefficient_draws contains the equivalent uncentered intercept. Expected
 responses use the identity, logistic, or exponential inverse link. Poisson
 simulation rejects nonfinite rates or rates above 1e8.
+Reconciled outcome priors use the same simulation machinery. Use
+response='expected' to examine beliefs without individual residual noise;
+simulated outcomes additionally include the unchanged residual-scale prior.
 }

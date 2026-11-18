@@ -42,7 +42,7 @@ prior_rstanarm_validate = function(object) {
     achieved = vapply(records, prior_distribution_target, numeric(1), prior = object$selected[[name]])
     targets = vapply(records, `[[`, numeric(1), "target")
     tolerances = vapply(records, `[[`, numeric(1), "tolerance")
-    if (any(!is.finite(achieved)) || any(abs(achieved - targets) > tolerances)) stop("Selected prior does not satisfy recorded beliefs for ", name, ".")
+    if ((is.null(object$joint) || name == "sigma") && (any(!is.finite(achieved)) || any(abs(achieved - targets) > tolerances))) stop("Selected prior does not satisfy recorded beliefs for ", name, ".")
   }
   if (prior_has_sigma(object) && object$selected$sigma$distribution != "exponential") stop("Only exponential residual-scale priors can currently be exported faithfully.")
   if (!identical(object$backend$QR, FALSE) || !identical(object$backend$sparse, FALSE)) stop("Export requires QR = FALSE and sparse = FALSE.")

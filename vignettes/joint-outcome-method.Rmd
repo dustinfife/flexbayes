@@ -1,0 +1,131 @@
+---
+title: "Joint outcome elicitation: method and limitations"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Joint outcome elicitation: method and limitations}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+## Supported distribution and parameterization
+
+`update_outcome()` reconciles beliefs about a Gaussian conditional expected
+response, not individual observations. The initial scope is identity-link
+regression with an intercept, numeric predictors, and independent Normal
+coefficient priors. Existing coefficient-only candidate selection runs first;
+Student's t selections are rejected rather than approximated by Normals.
+The residual-scale distribution is not optimized. Offsets are already
+unsupported by `identify_priors()`.
+
+The existing frozen model terms and prediction-matrix builder construct each
+configuration's row. All original predictors must be supplied once in `at`;
+transformations and interactions are evaluated using those terms. Columns
+are aligned with the original coefficients. For slope columns, their original
+model-matrix means are subtracted, matching rstanarm's centered intercept.
+Independence is imposed in this centered parameterization, not in an
+uncentered intercept parameterization. The latter generally has correlations.
+
+For baseline means $\mu_{0j}$ and SDs $s_{0j}$, optimization uses dimensionless
+variables $u_j$ and $\ell_j$:
+
+$$
+\mu_j=\mu_{0j}+s_{0j}u_j,\qquad s_j=s_{0j}\exp(\ell_j).
+$$
+
+At row $x_k$, $M_k\sim N(x_k^T\mu,\sum_j x_{kj}^2s_j^2)$.
+Mean and mode constraints therefore use $x_k^T\mu$; inequality probabilities
+use the corresponding Normal CDF (or its upper tail). Probabilities must
+lie strictly between zero and one at finite thresholds. No residual noise
+is added to these calculations.
+
+## Three priorities, without preference weights
+
+1. All outcome beliefs must hold within their absolute `belief()` tolerances.
+2. Among feasible priors, minimize the maximum excess violation of explicit
+   coefficient beliefs: $\max_i\max(0, |a_i-t_i|/\tau_i-1)$, where $a_i$ is
+   the achieved quantity, $t_i$ its target, and $\tau_i$ its tolerance.
+3. Among those solutions, minimize
+
+$$
+\mathrm{KL}(Q\,||\,P_0)=\frac12\sum_j
+\left[u_j^2+\exp(2\ell_j)-1-2\ell_j\right].
+$$
+
+Here $Q$ is the adjusted joint Normal prior and $P_0$ the original
+coefficient-only selection. This direction penalizes departures in means
+and scales relative to the baseline. Explicit beliefs enter priority 2;
+backend defaults enter only priority 3. No arbitrary weighting of explicit
+beliefs against defaults is used. A parameter with zero contribution at all
+specified configurations stays at its baseline unless another explicit
+constraint requires otherwise.
+
+Adding another outcome specification recomputes from the same coefficient-only
+baseline. Updating coefficient beliefs rebuilds that baseline and reconciles
+all retained outcomes. Neither addition mutates its input. Original statements,
+entered standardized units, IDs, defaults, and candidate diagnostics are
+retained; achieved joint diagnostics are stored separately.
+
+## Analytical benchmark
+
+With fixed variances and one exact location constraint, minimizing KL over
+means is minimum Mahalanobis displacement:
+
+$$
+\mu_{new}=\mu_0+
+\frac{\Sigma_0 x}{x^T\Sigma_0x}(m-x^T\mu_0).
+$$
+
+This is used to initialize the numerical search and as an independent
+regression-test benchmark. The numerical solution with a nonzero acceptance
+tolerance may lie slightly inside its tolerance boundary. The formula does
+not solve the general problem with changing variances, multiple probability
+constraints, or prioritized coefficient beliefs.
+
+## Numerical search and reliability
+
+The implementation uses deterministic augmented-Lagrangian optimization,
+BFGS, analytic gradients, and a log-SD parameterization. A dimensionless
+maximum-violation variable implements priority 2. Constraints are scaled by
+baseline SDs (probabilities use unit scale); this is numerical conditioning,
+not a preference weight. The priority-2 optimum is retained to relative
+numerical accuracy before KL minimization. A small interior tolerance margin
+reduces rounding problems; an outcome-feasibility retry removes that margin
+when tolerance intervals have a narrow intersection. A final Jacobian-based
+correction restores numerical feasibility. Actual, unscaled belief residuals
+are always recomputed before accepting a result.
+
+The routine consumes no random numbers. It is a deterministic local search,
+not a proof of a global optimum or uniqueness. A single outcome belief cannot
+identify every coefficient mean and variance. The minimax/KL criterion chooses
+an anchored solution to underdetermined specifications. Diagnostics include
+targets, achieved quantities, residuals in tolerance units, optimizer codes,
+iteration counts, scaled constraint violations, objective values, and local
+stationarity residuals. A nonnegative multiplier certificate checks first-order
+optimality; a feasible result without a sufficiently small certificate residual
+is not accepted. This local check does not certify a global optimum.
+
+Some conflicts have direct certificates: incompatible location constraints
+against the design matrix, or impossible ordered CDF requirements at the same
+configuration. These are labeled incompatible. Other failures are labeled
+numerically unresolved rather than claiming a proof of mathematical
+impossibility. In either case, predictive checking, export, and fitting stop.
+Compatible beliefs satisfy all explicit and outcome statements; reconciled
+beliefs satisfy the outcomes but warn about the original coefficient statements
+that were relaxed. They are never relabeled as satisfied.
+
+Extremely ill-conditioned designs or demanding probability constraints may
+remain unresolved. More general response families, categorical predictors,
+correlated priors, or unsupported distribution shapes require future methods;
+no silent approximation is attempted.
+
+## Checking and backend fidelity
+
+`summary(priors, diagnostics=TRUE)` reports each configuration, achieved outcome
+beliefs, baseline and adjusted coefficients, and explicit belief relaxations.
+`check_prior()` samples the adjusted coefficients using the unchanged prior
+predictive machinery; `expected` excludes residual noise and `simulated`
+includes it. `as_rstanarm()` exports adjusted Normal locations and scales with
+`autoscale=FALSE`, retaining the centered intercept and unchanged residual prior.
+`fit()` uses that same export. Changed data, selected distributions, or stale
+reconciliation diagnostics are rejected. Export remains restricted to the
+existing verified rstanarm version; automated tests do not require Stan sampling.

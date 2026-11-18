@@ -3,6 +3,9 @@
 #' Construct a reusable specification and add it to a prior object with `+`.
 #' Specifications do not fit distributions until applied. Addition delegates to
 #' the same machinery as update(), preserving existing beliefs and diagnostics.
+#' Expected-outcome specifications can be added with update_outcome(); these
+#' reconcile jointly and may explicitly relax coefficient beliefs. Updating a
+#' coefficient recomputes reconciliation from its coefficient-only baseline.
 #' Chain additions as `priors + update_priors(...) + update_priors(...)`.
 #' Addition requires a prior object on the left and a specification on the right;
 #' specifications are not combined independently of a prior object.
@@ -32,6 +35,7 @@ update_priors = function(parameter, ...) {
 #' @export
 `+.flexbayes_priors` = function(e1, e2) {
   if (missing(e2)) stop("Use priors + update_priors(...); unary + is not supported.")
+  if (inherits(e1,"flexbayes_priors") && inherits(e2,"flexbayes_outcome_update")) return(prior_apply_outcome(e1,e2))
   if (!inherits(e1, "flexbayes_priors") || !inherits(e2, "flexbayes_prior_update")) stop("Use a flexbayes_priors object on the left and an update_priors() specification on the right.")
   # Unname the list so a belief argument cannot masquerade as parameter/remove.
   do.call(stats::update, c(list(object = e1, parameter = e2$parameter), unname(e2$beliefs)))
@@ -41,3 +45,6 @@ update_priors = function(parameter, ...) {
 # operands receive the same error and our two classes cannot conflict in Ops.
 #' @export
 `+.flexbayes_prior_update` = `+.flexbayes_priors`
+
+#' @export
+`+.flexbayes_outcome_update` = `+.flexbayes_priors`
