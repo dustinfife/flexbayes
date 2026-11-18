@@ -2,26 +2,35 @@
 # P(X < t) precedes P(X <= t), allowing atoms at t.
 # Upper-tail events are complements of these two different cuts.
 prior_check_probability_constraints = function(records) {
+  # Put transformed probability statements on a common comparison scale.
   records = prior_outcome_probability_records(records)
   for (i in seq_along(records)) {
     r = records[[i]]
     if (r$type != "probability" || is.finite(r$threshold)) next
     expected = if (r$threshold == Inf) 1 else 0
     if (r$operator %in% c(">", ">=")) expected = 1 - expected
-    if (abs(r$target - expected) > r$tolerance) return(list(contradictory = TRUE, conflicts = i,
-      message = paste0("Belief ", i, " contradicts the outcome domain: this region has probability ", expected, ".")))
+    if (abs(r$target - expected) > r$tolerance) {
+      return(list(contradictory = TRUE, conflicts = i,
+        message = paste0("Belief ", i, " contradicts the outcome domain: this region has probability ", expected, ".")))
+    }
   }
+
+  # Keep strict and inclusive cuts separate so future atoms remain possible.
   indices = which(vapply(records, function(r) r$type == "probability", logical(1)))
   if (!length(indices)) return(list(contradictory = FALSE))
   cuts = lapply(indices, function(i) {
     r = records[[i]]
     lower = r$operator %in% c("<", "<=")
     probability = if (lower) r$target else 1 - r$target
-    list(index = i, threshold = r$threshold,
+    list(
+      index = i,
+      threshold = r$threshold,
       inclusive = r$operator %in% c("<=", ">"),
-      probability = probability, lower = lower,
+      probability = probability,
+      lower = lower,
       minimum = max(0, probability - r$tolerance),
-      maximum = min(1, probability + r$tolerance))
+      maximum = min(1, probability + r$tolerance)
+    )
   })
   for (cut in cuts) {
     r = records[[cut$index]]
@@ -31,6 +40,8 @@ prior_check_probability_constraints = function(records) {
     }
   }
   if (length(cuts) < 2L) return(list(contradictory = FALSE))
+
+  # Compare tolerance bands rather than requiring identical point targets.
   for (a in seq_len(length(cuts) - 1L)) {
     for (b in seq.int(a + 1L, length(cuts))) {
       left = cuts[[a]]

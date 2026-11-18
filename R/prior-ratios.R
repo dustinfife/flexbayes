@@ -2,13 +2,25 @@ prior_ratio_scale = function(scale) !is.null(scale) && scale %in% c("odds_ratio"
 
 prior_ratio_validate = function(record, object, parameter) {
   family = object$model$family$family
+
+  # Match the multiplicative interpretation to the model link.
   expected = switch(family, binomial = "odds_ratio", poisson = "rate_ratio", "unsupported")
   if (record$scale != expected) stop("Requested ratio scale does not match this model family: ", record$scale)
   metadata = prior_numeric_slope_metadata(object$model)
-  if (parameter == "(Intercept)" || !parameter %in% names(metadata)) stop("Ratio beliefs require an untransformed numeric slope without interactions; unsupported parameter: ", parameter)
+  if (parameter == "(Intercept)" || !parameter %in% names(metadata)) {
+    stop(
+      "Ratio beliefs require an untransformed numeric slope without interactions; unsupported parameter: ",
+      parameter
+    )
+  }
   predictor = metadata[[parameter]]$predictor
   expressions = Filter(is.call, as.list(attr(object$model$terms, "variables"))[-1])
-  if (any(vapply(expressions, prior_expression_uses_predictor, logical(1), predictor = predictor))) stop("Ratio beliefs require an untransformed numeric slope without other transformations of the same predictor: ", parameter)
+  if (any(vapply(expressions, prior_expression_uses_predictor, logical(1), predictor = predictor))) {
+    stop(
+      "Ratio beliefs require an untransformed numeric slope without other transformations of the same predictor: ",
+      parameter
+    )
+  }
   value = if (record$type == "probability") record$threshold else record$target
   if (!is.numeric(value) || length(value) != 1L || !is.finite(value) || value <= 0) stop("Ratio targets and thresholds must be positive finite numbers.")
   record
@@ -31,12 +43,24 @@ prior_fit_single_ratio = function(record, reference) {
   }
   prior = list(distribution = "normal", mean = location, sd = spread)
   achieved = tryCatch(prior_distribution_target(record, prior), error = function(e) e)
-  if (inherits(achieved, "error")) return(list(valid = FALSE, message = paste("Single ratio belief is outside reliable numerical range; add another belief.", conditionMessage(achieved))))
+  if (inherits(achieved, "error")) {
+    return(list(
+      valid = FALSE,
+      message = paste("Single ratio belief is outside reliable numerical range; add another belief.", conditionMessage(achieved))
+    ))
+  }
   residual = (achieved - record$target) / record$tolerance
   valid = is.finite(residual) && abs(residual) <= 1
-  list(valid = valid, distribution = prior, achieved = achieved, residuals = residual,
-    score = residual^2, reference_used = TRUE, numerical = paste(retained, "Analytic lognormal evaluation; no numerical integration."),
-    message = if (!valid) "Single ratio constraint could not be satisfied at the backend reference; add another belief." else NULL)
+  list(
+    valid = valid,
+    distribution = prior,
+    achieved = achieved,
+    residuals = residual,
+    score = residual^2,
+    reference_used = TRUE,
+    numerical = paste(retained, "Analytic lognormal evaluation; no numerical integration."),
+    message = if (!valid) "Single ratio constraint could not be satisfied at the backend reference; add another belief." else NULL
+  )
 }
 
 prior_expression_uses_predictor = function(expression, predictor) predictor %in% all.vars(expression)
@@ -80,9 +104,19 @@ prior_ratio_diagnostics = function(object, parameter) {
   if (length(unique) == 1L && prior_ratio_scale(unique[[1]]$scale) && unique[[1]]$type != "probability") {
     type = unique[[1]]$type
     if (type == "sd") {
-      prior_console_line(paste0("User-supplied constraint: ratio SD. Link spread derived from that constraint; backend-default link location retained = ", format(object$defaults[[parameter]]$mean, digits = 5), "."))
+      prior_console_line(paste0(
+        "User-supplied constraint: ratio SD. Link spread derived from that constraint; backend-default link location retained = ",
+        format(object$defaults[[parameter]]$mean, digits = 5),
+        "."
+      ))
     } else {
-      prior_console_line(paste0("User-supplied constraint: ratio ", type, ". Link location derived from that constraint; backend-default link SD retained = ", format(object$defaults[[parameter]]$sd, digits = 5), "."))
+      prior_console_line(paste0(
+        "User-supplied constraint: ratio ",
+        type,
+        ". Link location derived from that constraint; backend-default link SD retained = ",
+        format(object$defaults[[parameter]]$sd, digits = 5),
+        "."
+      ))
     }
   } else {
     location_only = all(vapply(records, prior_ratio_location_constraint, logical(1)))

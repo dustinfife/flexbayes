@@ -3,6 +3,8 @@ prior_numeric_slope_metadata = function(model) {
   result = list()
   terms = model$terms
   factors = attr(terms, "factors")
+
+  # Only plain numeric main effects have a supported one-SD interpretation.
   symbols = Filter(is.symbol, as.list(attr(terms, "variables"))[-1])
   simple = vapply(symbols, as.character, character(1))
   for (variable in names(model$frame)) {
@@ -12,6 +14,7 @@ prior_numeric_slope_metadata = function(model) {
     label = paste(deparse(as.name(variable), backtick = TRUE), collapse = "")
     term = match(label, attr(terms, "term.labels"))
     if (is.na(term)) next
+
     # A main effect involved in an interaction is outside this initial scope.
     row = match(label, rownames(factors))
     if (!is.na(row) && any(factors[row, ] > 0 & attr(terms, "order") > 1)) next
@@ -40,16 +43,21 @@ prior_standardization_factor = function(object, parameter) {
   if (is.null(info)) stop("Standardized beliefs require an untransformed numeric slope without interactions; unsupported parameter: ", parameter)
   if (!is.finite(info$predictor_sd) || info$predictor_sd <= 0 ||
       !is.finite(info$outcome_sd) || info$outcome_sd <= 0 ||
-      !is.finite(info$factor) || info$factor <= 0) stop("Standardization requires positive finite predictor and outcome SDs.")
+      !is.finite(info$factor) || info$factor <= 0) {
+    stop("Standardization requires positive finite predictor and outcome SDs.")
+  }
   prior_validate_standardization_data(object)
   info$factor
 }
 
 prior_validate_standardization_data = function(object) {
+  # Rebuild the original estimation sample to catch changed scaling data.
   frame = stats::model.frame(object$model$formula, object$model$data, na.action = stats::na.fail)
   X = stats::model.matrix(attr(frame, "terms"), frame, contrasts.arg = object$model$contrasts)
   if (!isTRUE(all.equal(X, object$model$X)) ||
-      !isTRUE(all.equal(stats::model.response(frame), stats::model.response(object$model$frame)))) stop("Model data changed since standardization; identify priors again.")
+      !isTRUE(all.equal(stats::model.response(frame), stats::model.response(object$model$frame)))) {
+    stop("Model data changed since standardization; identify priors again.")
+  }
   invisible(object)
 }
 
@@ -62,6 +70,8 @@ prior_validate_standardized_beliefs = function(object) {
 prior_convert_belief = function(record, object, parameter) {
   if (prior_outcome_scale(record$scale)) return(prior_outcome_validate(record, object, parameter))
   if (!identical(record$scale, "standardized")) return(record)
+
+  # Preserve entered values before converting constraints to coefficient units.
   factor = prior_standardization_factor(object, parameter)
   if (!is.null(record$entered)) {
     record$target = record$entered$target
@@ -75,6 +85,14 @@ prior_convert_belief = function(record, object, parameter) {
     record$target = record$target * factor
     record$tolerance = record$tolerance * factor
   }
-  if (!is.finite(record$target) || (!is.null(record$threshold) && !is.finite(record$threshold)) || !is.finite(record$tolerance) || record$tolerance <= 0) stop("Standardized constraint exceeds numerical limits.")
+
+  # Reject overflow rather than fitting a different constraint.
+  if (!is.finite(record$target) ||
+      (!is.null(record$threshold) &&
+      !is.finite(record$threshold)) ||
+      !is.finite(record$tolerance) ||
+      record$tolerance <= 0) {
+    stop("Standardized constraint exceeds numerical limits.")
+  }
   record
 }

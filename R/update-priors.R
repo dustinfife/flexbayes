@@ -35,8 +35,11 @@ update_priors = function(parameter, ...) {
 #' @export
 `+.flexbayes_priors` = function(e1, e2) {
   if (missing(e2)) stop("Use priors + update_priors(...); unary + is not supported.")
-  if (inherits(e1,"flexbayes_priors") && inherits(e2,"flexbayes_outcome_update")) return(prior_apply_outcome(e1,e2))
-  if (!inherits(e1, "flexbayes_priors") || !inherits(e2, "flexbayes_prior_update")) stop("Use a flexbayes_priors object on the left and an update_priors() specification on the right.")
+  if (inherits(e1, "flexbayes_priors") && inherits(e2, "flexbayes_outcome_update")) return(prior_apply_outcome(e1, e2))
+  if (!inherits(e1, "flexbayes_priors") || !inherits(e2, "flexbayes_prior_update")) {
+    stop("Use a flexbayes_priors object on the left and an update_priors() specification on the right.")
+  }
+
   # Unname the list so a belief argument cannot masquerade as parameter/remove.
   do.call(stats::update, c(list(object = e1, parameter = e2$parameter), unname(e2$beliefs)))
 }

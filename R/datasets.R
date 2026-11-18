@@ -5,7 +5,7 @@ flexbayes_model_dataset = function(name) {
   root = getNamespaceInfo(asNamespace("flexbayes"), "path")
   filename = paste0(name, ".rda")
   directory = if (file.exists(file.path(root, "DESCRIPTION")) &&
-                  !file.exists(file.path(root, "Meta", "package.rds"))) "inst/extdata" else "extdata"
+    !file.exists(file.path(root, "Meta", "package.rds"))) "inst/extdata" else "extdata"
   fixture = file.path(root, directory, filename)
   if (!file.exists(fixture)) stop("Fitted dataset file not found: ", name, call. = FALSE)
   environment = new.env(parent = baseenv())

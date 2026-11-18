@@ -22,21 +22,34 @@ check_prior = function(object, n = 1000, newdata = NULL) {
   if (!is.numeric(n) || length(n) != 1L || !is.finite(n) || n < 1 || n != floor(n) || n > .Machine$integer.max) stop("n must be a positive integer.")
   prior_validate_family(object$model$family)
   prior_predictive_validate(object)
+
+  # Sample the selected priors once, keeping joint draw identities intact.
   X = prior_prediction_matrix(object, newdata)
   draws = prior_sample_parameters(object, n)
   coefficients = draws[, colnames(X), drop = FALSE]
+
+  # Convert the centered intercept only for prediction on the original data.
   if ("(Intercept)" %in% colnames(X)) {
     slopes = setdiff(colnames(X), "(Intercept)")
     coefficients[, "(Intercept)"] = draws[, "(Intercept)"] -
       as.vector(draws[, slopes, drop = FALSE] %*% object$model$reference[slopes])
   }
+
+  # Expected responses and individual observations share the same parameters.
   linear = coefficients %*% t(X)
   response = prior_simulate_response(linear, draws, object$model$family)
   expected = response$expected
   simulated = response$simulated
   if (any(!is.finite(expected)) || any(!is.finite(simulated))) stop("Non-finite prior predictions; selected priors or predictor values exceed numerical limits.")
-  result = list(parameter_draws = draws, coefficient_draws = coefficients,
-    expected = expected, simulated = simulated, linear_predictor = linear, X = X,
+
+  # Save the original model information for later plotting and validation.
+  result = list(
+    parameter_draws = draws,
+    coefficient_draws = coefficients,
+    expected = expected,
+    simulated = simulated,
+    linear_predictor = linear,
+    X = X,
     metadata = list(n = n, observations = nrow(X), family = object$model$family,
       formula = object$model$formula, reference = object$model$reference,
       priors = object$selected, backend = object$backend,
@@ -45,7 +58,8 @@ check_prior = function(object, n = 1000, newdata = NULL) {
       observed_response = stats::model.response(object$model$frame),
       terms = object$model$terms, contrasts = object$model$contrasts,
       factor_levels = lapply(object$model$frame[vapply(object$model$frame, is.factor, logical(1))], levels),
-      default_scaling = prior_default_description(object)))
+      default_scaling = prior_default_description(object))
+  )
   class(result) = "flexbayes_prior_predictive"
   result
 }
@@ -81,6 +95,8 @@ prior_prediction_matrix = function(object, newdata) {
   terms = stats::delete.response(object$model$terms)
   variables = all.vars(terms)
   if (!all(variables %in% names(newdata))) stop("newdata is missing predictors: ", paste(setdiff(variables, names(newdata)), collapse = ", "))
+
+  # Retain the estimation sample's factor levels and contrasts for new cases.
   factors = vapply(object$model$frame, is.factor, logical(1))
   levels = lapply(object$model$frame[factors], levels)
   frame = stats::model.frame(terms, newdata, na.action = stats::na.fail, xlev = levels)
@@ -207,12 +223,20 @@ prior_plot_interval = function(x, response = "both") {
   for (kind in types) {
     values = x[[kind]]
     intervals = apply(values, 2, stats::quantile, probs = c(.05, .5, .95), names = FALSE)
-    rows[[kind]] = data.frame(row = seq_len(ncol(values)), lower = intervals[1, ],
-      median = intervals[2, ], upper = intervals[3, ],
-      response = if (kind == "expected") "Expected outcome" else "Predicted outcome")
+    rows[[kind]] = data.frame(
+      row = seq_len(ncol(values)),
+      lower = intervals[1, ],
+      median = intervals[2, ],
+      upper = intervals[3, ],
+      response = if (kind == "expected") "Expected outcome" else "Predicted outcome"
+    )
   }
   ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = row, y = median)) +
     ggplot2::geom_linerange(ggplot2::aes(ymin = lower, ymax = upper), alpha = .5) +
     ggplot2::geom_point() + ggplot2::facet_wrap(~response) + ggplot2::theme_bw() +
-    ggplot2::labs(x = "Prediction row", y = switch(x$metadata$family$family, binomial = "Probability / binary response", poisson = "Expected count / count", "Response"), title = "Prior predictive intervals")
+    ggplot2::labs(
+      x = "Prediction row",
+      y = switch(x$metadata$family$family, binomial = "Probability / binary response", poisson = "Expected count / count", "Response"),
+      title = "Prior predictive intervals"
+    )
 }

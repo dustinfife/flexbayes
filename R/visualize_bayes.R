@@ -9,7 +9,7 @@
 #' @param posterior_lines Number of sampled posterior regression lines (default 0).
 #' @param seed Optional seed for selecting posterior draws.
 #' @param ... Additional arguments passed to flexplot.
-#' 
+#'
 #' @exportS3Method flexplot::visualize brmsfit
 #' @importFrom flexplot visualize
 NULL
@@ -19,7 +19,6 @@ visualize.brmsfit = function(object, plot = "model", formula = NULL, ...) {
   bayes_visualize(object, plot, formula, ...)
 }
 
-
 #' @rdname visualize.brmsfit
 #' @export
 #' @exportS3Method flexplot::visualize stanreg
@@ -27,12 +26,9 @@ visualize.stanreg = function(object, plot = "model", formula = NULL, ...) {
   bayes_visualize(object, plot, formula, ...)
 }
 
-
 bayes_visualize = function(object, plot = "model", formula = NULL,
-                            posterior_lines = 0, seed = NULL, ...) {
-  if (plot != "model") {
-    stop("Currently, Bayesian visualize() only supports plot = 'model'.")
-  }
+                           posterior_lines = 0, seed = NULL, ...) {
+  if (plot != "model") stop("Currently, Bayesian visualize() only supports plot = 'model'.")
 
   if (length(posterior_lines) != 1L || !is.numeric(posterior_lines) ||
       is.na(posterior_lines) || !is.finite(posterior_lines) ||
@@ -72,7 +68,7 @@ bayes_visualize = function(object, plot = "model", formula = NULL,
   p + geometry(
     data = lines,
     mapping = ggplot2::aes(x = .data[[x]], y = .data[["prediction"]],
-                           group = .data[[".posterior_group"]]),
+      group = .data[[".posterior_group"]]),
     inherit.aes = FALSE, alpha = 0.15, colour = "gray50"
   )
 }

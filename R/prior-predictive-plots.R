@@ -26,12 +26,15 @@ prior_plot_outcome = function(x, response, max_display) {
     title = paste(c("Hypothetical distribution of", if (response == "expected") "expected", outcome, "based on priors"), collapse = " "),
     x = if (response == "expected") paste("Expected", outcome, "(based on priors)") else paste("Simulated", outcome, "based on priors"),
     y = if (discrete) "Proportion" else "Density",
-    caption = prior_plot_draw_note(nrow(x[[response]])))
+    caption = prior_plot_draw_note(nrow(x[[response]]))
+  )
 }
 
 prior_model_preparation = function(x, formula, bins, breaks, labels) {
   if (!"prepare_flexplot" %in% getNamespaceExports("flexplot") ||
-      !all(c("prediction.draw", "prediction.alpha") %in% names(formals(flexplot::flexplot)))) stop("Install a flexplot version providing prepare_flexplot() and prediction.draw rendering.")
+      !all(c("prediction.draw", "prediction.alpha") %in% names(formals(flexplot::flexplot)))) {
+    stop("Install a flexplot version providing prepare_flexplot() and prediction.draw rendering.")
+  }
   metadata = x$metadata
   if (is.null(metadata$prediction_data) || is.null(metadata$terms)) stop("This check lacks model-plot metadata; rerun check_prior().")
   if (!is.symbol(metadata$formula[[2]])) stop("Model plots currently require an untransformed response variable.")
@@ -39,6 +42,7 @@ prior_model_preparation = function(x, formula, bins, breaks, labels) {
   original_design = prior_model_grid_matrix(x, data)
   if (!isTRUE(all.equal(original_design, x$X))) stop("Model terms or predictor values changed since check_prior(); rerun the check.")
   outcome = as.character(metadata$formula[[2]])
+
   # New predictor-only cases have no observations to hide or overwrite. Supply
   # stored expected medians solely for the public preparer's outcome requirement.
   if (!outcome %in% names(data)) data[[outcome]] = apply(x$expected, 2, stats::median)
@@ -52,6 +56,7 @@ prior_model_preparation = function(x, formula, bins, breaks, labels) {
 
 prior_model_grid_matrix = function(x, grid) {
   terms = stats::delete.response(x$metadata$terms)
+
   # model.frame rebuilds factor levels; matrix contrasts are restored explicitly below.
   for (name in names(grid)) if (is.factor(grid[[name]])) attr(grid[[name]], "contrasts") = NULL
   frame = stats::model.frame(terms, grid, na.action = stats::na.fail, xlev = x$metadata$factor_levels)
@@ -89,7 +94,9 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
     count = min(count, floor(max_display / nrow(prep$data)))
   }
   ids = prior_display_indices(nrow(x$coefficient_draws), count)
-  if (nrow(prep$grid) * (if (display == "interval") 1 else length(ids)) > max_display) stop("Prediction grid exceeds max_display; use fewer draws or a simpler visualization formula.")
+  if (nrow(prep$grid) * (if (display == "interval") 1 else length(ids)) > max_display) {
+    stop("Prediction grid exceeds max_display; use fewer draws or a simpler visualization formula.")
+  }
   draw_column = tail(make.unique(c(names(prep$grid), all.vars(prep$formula), ".prior_draw")), 1)
   data = prep$data
   if (response == "simulated") {
@@ -115,17 +122,20 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
       prediction = prior_model_draw_frame(prep$grid, values, ids, draw_column)
       p = prior_model_render(prep, data, prediction, draw_column, alpha, response)
     }
+
     # Bands go behind curves, medians remain prominent in front of them.
     p$layers = c(overlay$interval, p$layers, overlay$median)
   }
   p = prior_model_observed_range(p, x)
   p + ggplot2::theme_bw() + ggplot2::labs(
     title = if (response == "expected") "Expected relationship based on priors" else "Simulated outcomes based on priors",
-    y = prior_plot_outcome_name(x), subtitle = NULL,
+    y = prior_plot_outcome_name(x),
+    subtitle = NULL,
     caption = switch(display,
       draws = prior_plot_draw_note(length(ids)),
       interval = paste("Median and central 90% prior interval;", nrow(x$coefficient_draws), "prior draws."),
-      both = paste("Central 90% prior interval from", nrow(x$coefficient_draws), "draws;", length(ids), "individual draws shown.")))
+      both = paste("Central 90% prior interval from", nrow(x$coefficient_draws), "draws;", length(ids), "individual draws shown."))
+  )
 }
 
 prior_plot_rng_state = function() {
@@ -146,10 +156,9 @@ prior_plot_draw_note = function(count) paste("Based on", count, "prior draws.")
 
 prior_model_observed_range = function(p, x) {
   observed = x$metadata$observed_response
+
   # Older checks retain training outcomes only when no newdata was supplied.
-  if (is.null(observed) && identical(x$metadata$newdata, FALSE)) {
-    observed = x$metadata$prediction_data[[prior_plot_outcome_name(x)]]
-  }
+  if (is.null(observed) && identical(x$metadata$newdata, FALSE)) observed = x$metadata$prediction_data[[prior_plot_outcome_name(x)]]
   if (is.null(observed)) {
     warning("Original observed outcomes unavailable; rerun check_prior() to display the observed range.", call. = FALSE)
     return(p)
@@ -175,6 +184,7 @@ prior_model_render = function(prep, data, prediction, draw_column, alpha, respon
     raw.data = response == "simulated", sample = if (response == "expected") 0 else Inf,
     suppress_smooth = TRUE, se = FALSE, jitter = FALSE, alpha = alpha)
   if (is.numeric(prep$plot_data[[prep$display_roles$x]])) return(p)
+
   # Keep native categorical points, mappings and dodge positions; only remove
   # the companion prediction lines that connect separate categories.
   p$layers = Filter(function(layer) !(inherits(layer$geom, "GeomLine") &&
@@ -185,6 +195,7 @@ prior_model_render = function(prep, data, prediction, draw_column, alpha, respon
 prior_model_summary = function(x, grid, max_display) {
   if (any(c(".prior_lower", ".prior_upper") %in% names(grid))) stop("Predictor names .prior_lower and .prior_upper are reserved for model interval metadata.")
   ids = seq_len(nrow(x$coefficient_draws))
+
   # Bound temporary prediction matrices without subsampling parameter draws.
   batch = max(1, floor(max_display / length(ids)))
   quantiles = matrix(NA_real_, nrow(grid), 3)
@@ -207,6 +218,7 @@ prior_model_summary_layer = function(layer) {
 prior_model_summary_layers = function(template, prep) {
   interval = median = list()
   numeric_x = is.numeric(prep$plot_data[[prep$display_roles$x]])
+
   # Reuse returned layer mappings, binned columns and position objects. This
   # deliberately does not inspect private path names or recreate dodge slots.
   # If flexplot changes its returned layer contract, fail rather than misplace

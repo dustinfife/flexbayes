@@ -21,6 +21,8 @@ fit.flexbayes_priors = function(object, ...) {
   if (length(arguments) && (is.null(names) || anyNA(names) || any(!nzchar(names)) || anyDuplicated(names))) stop("Fitting arguments must have unique, complete names.")
   prohibited = setdiff(names, allowed)
   if (length(prohibited)) stop("Cannot override model, priors, or parameterization; unsupported fitting arguments: ", paste(prohibited, collapse = ", "))
+
+  # Use the same validated export as direct backend fitting.
   backend = object$backend$package
   if (!identical(backend, "rstanarm")) stop("Unsupported fitting backend: ", backend)
   prior_rstanarm_fit(c(as_rstanarm(object), arguments))

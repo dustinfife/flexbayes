@@ -1,6 +1,8 @@
 prior_validate_family = function(family) {
   if (!is.list(family) || length(family$family) != 1L || length(family$link) != 1L ||
-      !paste(family$family, family$link) %in% c("gaussian identity", "binomial logit", "poisson log")) stop("Supported families: Gaussian identity, binomial logit, and Poisson log only.")
+      !paste(family$family, family$link) %in% c("gaussian identity", "binomial logit", "poisson log")) {
+    stop("Supported families: Gaussian identity, binomial logit, and Poisson log only.")
+  }
   invisible(family)
 }
 
@@ -22,7 +24,9 @@ prior_simulate_response = function(linear, draws, family) {
   if (any(!is.finite(linear))) stop("Non-finite linear predictors; revise priors or predictor values.")
   if (family$family == "gaussian") return(list(expected = linear, simulated = prior_simulate_gaussian(linear, draws[, "sigma"])))
   expected = if (family$family == "binomial") stats::plogis(linear) else exp(linear)
-  if (family$family == "poisson" && (any(!is.finite(expected)) || any(expected > 1e8))) stop("Poisson predicted rates are nonfinite or exceed the simulation safety limit of 1e8; revise priors or predictor values.")
+  if (family$family == "poisson" && (any(!is.finite(expected)) || any(expected > 1e8))) {
+    stop("Poisson predicted rates are nonfinite or exceed the simulation safety limit of 1e8; revise priors or predictor values.")
+  }
   values = if (family$family == "binomial") stats::rbinom(length(expected), size = 1, prob = expected) else stats::rpois(length(expected), lambda = expected)
   list(expected = expected, simulated = matrix(values, nrow = nrow(linear), dimnames = dimnames(linear)))
 }

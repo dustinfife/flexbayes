@@ -19,6 +19,8 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   prior_validate_family(family)
   if (!inherits(formula, "formula") || length(formula) != 3L) stop("Supply a two-sided formula.")
   if (any(all.names(formula) %in% c("|", "||"))) stop("Mixed models are not supported.")
+
+  # Use one estimation sample for defaults, centering and later predictions.
   frame = stats::model.frame(formula, data, na.action = stats::na.fail)
   terms = attr(frame, "terms")
   if (length(attr(terms, "offset"))) stop("Offsets are not supported yet.")
@@ -32,12 +34,28 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   slopes = setdiff(colnames(X), "(Intercept)")
   reference = if (intercept) colMeans(X[, slopes, drop = FALSE]) else stats::setNames(rep(0, length(slopes)), slopes)
   if (family$family == "gaussian" && "sigma" %in% colnames(X)) stop("Predictor name sigma conflicts with the residual scale parameter.")
+
+  # Preserve backend defaults separately from any elicited selections.
   defaults = prior_rstanarm_defaults(X, y, family)
-  parameters = data.frame(parameter = names(defaults), role = c(ifelse(colnames(X) == "(Intercept)", "centered intercept", "coefficient"), if (family$family == "gaussian") "residual scale"), term = c(attr(X, "assign"), if (family$family == "gaussian") NA_integer_), lower = c(rep(-Inf, ncol(X)), if (family$family == "gaussian") 0), upper = Inf)
-  out = list(model = list(formula = formula, data = data, family = family, frame = frame, terms = terms, X = X, contrasts = attr(X, "contrasts"), reference = reference), parameters = parameters, defaults = defaults, selected = defaults, beliefs = stats::setNames(rep(list(list()), length(defaults)), names(defaults)), candidates = stats::setNames(rep(list(list()), length(defaults)), names(defaults)), next_id = 1L, backend = list(package = package, version = version, compatible = TRUE, QR = FALSE, sparse = FALSE, outcome_mean = mean(y), outcome_sd = sy))
-  if (family$family != "gaussian") {
-    out$parameters$scale = if (family$family == "binomial") "log-odds" else "log-rate"
-  }
+  parameters = data.frame(
+    parameter = names(defaults),
+    role = c(ifelse(colnames(X) == "(Intercept)", "centered intercept", "coefficient"), if (family$family == "gaussian") "residual scale"),
+    term = c(attr(X, "assign"), if (family$family == "gaussian") NA_integer_),
+    lower = c(rep(-Inf, ncol(X)), if (family$family == "gaussian") 0),
+    upper = Inf
+  )
+  out = list(
+    model = list(formula = formula, data = data, family = family, frame = frame, terms = terms, X = X, contrasts = attr(X, "contrasts"), reference = reference),
+    parameters = parameters,
+    defaults = defaults,
+    selected = defaults,
+    beliefs = stats::setNames(rep(list(list()), length(defaults)), names(defaults)),
+    candidates = stats::setNames(rep(list(list()), length(defaults)), names(defaults)),
+    next_id = 1L,
+    backend = list(package = package, version = version, compatible = TRUE, QR = FALSE, sparse = FALSE, outcome_mean = mean(y), outcome_sd = sy)
+  )
+  if (family$family != "gaussian") out$parameters$scale = if (family$family == "binomial") "log-odds" else "log-rate"
+
   out$model$standardization = prior_standardization_metadata(out$model)
   class(out) = "flexbayes_priors"
   out
@@ -45,11 +63,13 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
 
 prior_format = function(prior) {
   if (is.null(prior)) return("None selected")
-  switch(prior$distribution,
+  switch(
+    prior$distribution,
     normal = sprintf("Normal(%.2f, %.2f)", prior$mean, prior$sd),
     student_t = sprintf("t(df=%g, %.2f, %.2f)", prior$df, prior$location, prior$scale),
     exponential = sprintf("Exponential(%.3g)", prior$rate),
-    "Unsupported")
+    "Unsupported"
+  )
 }
 
 prior_console_line = function(text) {
@@ -64,8 +84,9 @@ print.flexbayes_priors = function(x, ...) {
     if (identical(x$candidates[[name]]$status, "backend_incompatible")) return("Incompatible")
     if (is.null(x$selected[[name]])) return("Unresolved")
     if (!is.null(x$joint) && name %in% names(x$joint$problem$mean) &&
-        !isTRUE(all.equal(x$joint$baseline[[name]],x$selected[[name]])))
+        !isTRUE(all.equal(x$joint$baseline[[name]], x$selected[[name]]))) {
       return(if (length(x$beliefs[[name]])) "Adjusted (elicited)" else "Adjusted (default)")
+    }
     if (!length(x$beliefs[[name]])) return("Backend default")
     if (isTRUE(x$candidates[[name]]$reference_used)) return("Elicited*")
     "Elicited"
@@ -75,7 +96,7 @@ print.flexbayes_priors = function(x, ...) {
     Source = unname(source), Beliefs = lengths(x$beliefs), row.names = NULL)
   print(table, row.names = FALSE, right = FALSE)
   if (any(source == "Elicited*")) prior_console_line("* Backend default used to resolve underdetermined beliefs.")
-  if (!is.null(x$joint)) cat("Outcome reconciliation:",x$joint$status,";",length(x$outcomes),"configuration(s).\n")
+  if (!is.null(x$joint)) cat("Outcome reconciliation:", x$joint$status, ";", length(x$outcomes), "configuration(s).\n")
   invisible(x)
 }
 
@@ -123,18 +144,38 @@ print.summary.flexbayes_priors = function(x, ...) {
     }
     outcome_records = Filter(function(r) prior_outcome_scale(r$scale), records)
     ratio_records = Filter(function(r) prior_ratio_scale(r$scale), outcome_records)
-    if (length(ratio_records)) prior_console_line(paste0("Requested scale: ", ratio_records[[1]]$scale, "; multiplicative effect of a one-unit predictor increase, holding other predictors constant. This is not a probability ratio or an additive response change."))
-    if (length(outcome_records) && !length(ratio_records)) prior_console_line("Outcome-scale beliefs describe the expected outcome at the model-matrix centering reference, not individual observed outcomes.")
+    if (length(ratio_records)) {
+      prior_console_line(paste0(
+        "Requested scale: ",
+        ratio_records[[1]]$scale,
+        "; multiplicative effect of a one-unit predictor increase, holding other predictors constant. This is not a probability ratio or an additive response change."
+      ))
+    }
+    if (length(outcome_records) && !length(ratio_records)) {
+      prior_console_line("Outcome-scale beliefs describe the expected outcome at the model-matrix centering reference, not individual observed outcomes.")
+    }
     candidate = object$candidates[[name]]
     if (!is.null(candidate$message)) prior_console_line(paste0("Warning (", name, "): ", candidate$message))
     if (diagnostics && length(ratio_records)) prior_ratio_diagnostics(object, name)
     if (diagnostics && identical(candidate$status, "contradictory")) {
       cat("  Candidate fitting skipped: mathematical contradiction.\n")
     } else if (diagnostics) {
-      cat("  ", if (identical(candidate$family, "student_t")) "Student's t" else "Normal", " candidate: ", if (isTRUE(candidate$valid)) "accepted" else "rejected", "\n", sep = "")
+      cat(
+        "  ",
+        if (identical(candidate$family, "student_t")) "Student's t" else "Normal",
+        " candidate: ",
+        if (isTRUE(candidate$valid)) "accepted" else "rejected",
+        "\n",
+        sep = ""
+      )
       if (length(candidate$alternatives)) {
         for (alternative in candidate$alternatives) {
-          prior_console_line(paste0("  ", alternative$family, ": ", if (isTRUE(alternative$valid)) paste0("acceptable, mathematical rank ", alternative$rank) else paste0("rejected; ", alternative$message)))
+          prior_console_line(paste0(
+            "  ",
+            alternative$family,
+            ": ",
+            if (isTRUE(alternative$valid)) paste0("acceptable, mathematical rank ", alternative$rank) else paste0("rejected; ", alternative$message)
+          ))
         }
         if (!is.null(candidate$mathematical)) prior_console_line(paste("Mathematical preference:", prior_format(candidate$mathematical)))
       }
@@ -146,11 +187,13 @@ print.summary.flexbayes_priors = function(x, ...) {
       }
       if (!is.null(candidate$score)) cat("  Score: ", format(candidate$score, digits = 4), "\n", sep = "")
       if (!is.null(candidate$achieved)) {
-        details = data.frame(Belief = seq_along(records),
+        details = data.frame(
+          Belief = seq_along(records),
           Target = vapply(records, `[[`, numeric(1), "target"),
           Achieved = candidate$achieved,
           Tolerance = vapply(records, `[[`, numeric(1), "tolerance"),
-          Residual = candidate$residuals)
+          Residual = candidate$residuals
+        )
         print(details, row.names = FALSE, digits = 4)
         prior_console_line("Residuals are divided by each belief's tolerance; acceptable absolute values are <= 1.")
       } else prior_console_line("Constraint diagnostics unavailable: candidate rejected before evaluation.")
@@ -162,7 +205,11 @@ print.summary.flexbayes_priors = function(x, ...) {
     if ("(Intercept)" %in% names(object$selected)) {
       prior_console_line("Centered intercept reference: model-matrix column means (including contrast and interaction columns).")
       reference = object$model$reference
-      if (length(reference)) print(data.frame(Column = names(reference), Reference = unname(reference)), row.names = FALSE, digits = 4) else cat("Intercept-only model; no predictor columns.\n")
+      if (length(reference)) print(
+        data.frame(Column = names(reference), Reference = unname(reference)),
+        row.names = FALSE,
+        digits = 4
+      ) else cat("Intercept-only model; no predictor columns.\n")
     } else cat("No intercept; predictors are not centered.\n")
   }
   invisible(x)
@@ -192,7 +239,12 @@ print.summary.flexbayes_priors = function(x, ...) {
 #' }
 #' @export
 plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
-  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
+  if (length(scale) != 1L ||
+      !is.character(scale) ||
+      is.na(scale) ||
+      !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) {
+    stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
+  }
   factor = 1
   if (prior_outcome_scale(scale)) {
     if (is.null(parameter) || length(parameter) != 1L) stop("Select one eligible parameter for a transformed-scale plot.")
@@ -234,7 +286,10 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
         Candidate = paste0(label, if (selected) " (selected)" else " (mathematical only)"))
     }
   }
-  result = ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(x = if (scale == "standardized") "Standardized coefficient" else if (scale == "probability") "Probability at centering reference" else if (scale == "response") "Expected count at centering reference" else if (scale == "odds_ratio") "Odds ratio (one-unit predictor increase)" else if (scale == "rate_ratio") "Rate ratio (one-unit predictor increase)" else if (x$model$family$family == "binomial") "Coefficient (log-odds)" else if (x$model$family$family == "poisson") "Coefficient (log-rate)" else "Parameter value", y = "Prior density")
+  result = ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(
+    x = if (scale == "standardized") "Standardized coefficient" else if (scale == "probability") "Probability at centering reference" else if (scale == "response") "Expected count at centering reference" else if (scale == "odds_ratio") "Odds ratio (one-unit predictor increase)" else if (scale == "rate_ratio") "Rate ratio (one-unit predictor increase)" else if (x$model$family$family == "binomial") "Coefficient (log-odds)" else if (x$model$family$family == "poisson") "Coefficient (log-rate)" else "Parameter value",
+    y = "Prior density"
+  )
   if (prior_ratio_scale(scale)) result = result + ggplot2::scale_x_log10()
   result
 }

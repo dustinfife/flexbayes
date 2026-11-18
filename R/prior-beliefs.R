@@ -21,16 +21,41 @@
 #' @return A prior_belief record.
 #' @export
 belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd = NULL, tolerance = 1e-6, scale = "original") {
-  if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
+  # Check the requested units before interpreting the belief.
+  if (length(scale) != 1L ||
+      !is.character(scale) ||
+      is.na(scale) ||
+      !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) {
+    stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
+  }
+
+  # Keep the expression as entered, and identify any supplied moments.
   expr = substitute(expression)
   targets = list(mean = mean, mode = mode, sd = sd)
   supplied = !vapply(targets, is.null, logical(1))
+
   if (!is.numeric(tolerance) || length(tolerance) != 1L || !is.finite(tolerance) || tolerance <= 0) stop("Positive finite tolerance required.")
+
+  # Resolve only the threshold, leaving the comparison itself unevaluated.
   if (!missing(expression)) {
-    if (any(supplied) || !is.call(expr) || length(expr) != 3L || !is.symbol(expr[[1]]) || !as.character(expr[[1]]) %in% c("<", ">", "<=", ">=") || !identical(expr[[2]], as.name("value"))) stop("Use value < constant or value > constant.")
+    if (any(supplied) ||
+        !is.call(expr) ||
+        length(expr) != 3L ||
+        !is.symbol(expr[[1]]) ||
+        !as.character(expr[[1]]) %in% c("<", ">", "<=", ">=") ||
+        !identical(expr[[2]], as.name("value"))) {
+      stop("Use value < constant or value > constant.")
+    }
     threshold = prior_resolve_threshold(expr[[3]], parent.frame())
     if (!is.numeric(probability) || length(probability) != 1 || !is.finite(probability) || probability < 0 || probability > 1) stop("Probability must be between zero and one.")
-    out = list(type = "probability", target = probability, threshold = threshold, operator = as.character(expr[[1]]), expression = expr, label = paste(deparse(expr), "with probability", probability))
+    out = list(
+      type = "probability",
+      target = probability,
+      threshold = threshold,
+      operator = as.character(expr[[1]]),
+      expression = expr,
+      label = paste(deparse(expr), "with probability", probability)
+    )
   } else {
     if (sum(supplied) != 1L || !is.null(probability)) stop("Supply exactly one mean, mode, or sd.")
     type = names(targets)[supplied]
@@ -38,6 +63,8 @@ belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd =
     if (!is.numeric(target) || length(target) != 1 || !is.finite(target) || (type == "sd" && target <= 0)) stop("Invalid belief target.")
     out = list(type = type, target = target, label = paste(type, "=", target))
   }
+
+  # Retain the entered units alongside the fitting tolerance.
   out$scale = scale
   if (scale != "original") out$label = paste0(out$label, " [", scale, "]")
   out$tolerance = tolerance
@@ -57,6 +84,7 @@ prior_resolve_threshold = function(expression, environment) {
 }
 
 prior_fit_location_scale = function(records, reference, family = "normal") {
+  # Repeated statements about the same quantity need overlapping tolerances.
   for (type in c("mean", "mode", "sd")) {
     same = Filter(function(r) r$type == type, records)
     if (length(same) > 1L) {
@@ -65,15 +93,24 @@ prior_fit_location_scale = function(records, reference, family = "normal") {
       if (lower > upper) return(list(valid = FALSE, message = paste("Inconsistent", type, "beliefs: target tolerances do not overlap.")))
     }
   }
+
+  # Express each belief as a constraint on location and scale.
   entry = prior_distribution_registry()[[family]]
   unit = if (family == "normal") list(distribution = "normal", mean = 0, sd = 1) else list(distribution = "student_t", location = 0, scale = 1, df = prior_student_t_policy()$df)
   A = matrix(numeric(), ncol = 2)
   b = numeric()
   for (r in records) {
-    row = switch(r$type, mean = c(1, 0), mode = c(1, 0), sd = c(0, entry$sd_factor), probability = c(1, prior_distribution_operation(unit, "quantile", if (r$operator %in% c("<", "<=")) r$target else 1 - r$target)))
+    row = switch(
+      r$type,
+      mean = c(1, 0),
+      mode = c(1, 0),
+      sd = c(0, entry$sd_factor),
+      probability = c(1, prior_distribution_operation(unit, "quantile", if (r$operator %in% c("<", "<=")) r$target else 1 - r$target))
+    )
     A = rbind(A, row)
     b = c(b, if (r$type == "probability") r$threshold else r$target)
   }
+
   rank = qr(A)$rank
   base = c(reference$mean, reference$sd / entry$sd_factor)
   if (rank == 1L) {
@@ -81,12 +118,34 @@ prior_fit_location_scale = function(records, reference, family = "normal") {
     direction = A[1, ]
     solution = base + direction * (b[1] - sum(direction * base)) / sum(direction^2)
   } else solution = as.numeric(qr.solve(A, b))
-  if (any(!is.finite(solution)) || solution[2] <= 0) return(list(valid = FALSE, reference_used = rank < 2, message = "No location-scale prior with positive scale satisfies these beliefs."))
-  distribution = if (family == "normal") list(distribution = family, mean = solution[1], sd = solution[2]) else list(distribution = family, location = solution[1], scale = solution[2], df = prior_student_t_policy()$df)
+  if (any(!is.finite(solution)) || solution[2] <= 0) {
+    return(list(
+      valid = FALSE,
+      reference_used = rank < 2,
+      message = "No location-scale prior with positive scale satisfies these beliefs."
+    ))
+  }
+  distribution = if (family == "normal") list(distribution = family, mean = solution[1], sd = solution[2]) else list(
+    distribution = family,
+    location = solution[1],
+    scale = solution[2],
+    df = prior_student_t_policy()$df
+  )
+
+  # Check every original belief before accepting the fitted distribution.
   achieved = vapply(records, prior_distribution_target, numeric(1), prior = distribution)
   residuals = (achieved - vapply(records, `[[`, numeric(1), "target")) / vapply(records, `[[`, numeric(1), "tolerance")
   valid = all(abs(residuals) <= 1)
-  list(valid = valid, reference_used = rank < 2, distribution = distribution, achieved = achieved, residuals = residuals, score = sum(residuals^2), rank = if (valid) 1L else NA_integer_, message = if (!valid) "Beliefs cannot be satisfied by this distribution family within tolerance." else NULL)
+  list(
+    valid = valid,
+    reference_used = rank < 2,
+    distribution = distribution,
+    achieved = achieved,
+    residuals = residuals,
+    score = sum(residuals^2),
+    rank = if (valid) 1L else NA_integer_,
+    message = if (!valid) "Beliefs cannot be satisfied by this distribution family within tolerance." else NULL
+  )
 }
 
 prior_distribution_target = function(record, prior) {
@@ -106,14 +165,25 @@ prior_fit_normal = function(records, reference) prior_fit_location_scale(records
 #' @return A revised prior specification.
 #' @export
 update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
+  # Validate additions and removals before changing the returned specification.
   if (length(parameter) != 1 || !parameter %in% names(object$beliefs)) stop("Unknown parameter.")
   if (parameter == "sigma" && prior_has_sigma(object)) stop("Residual-scale elicitation is not supported yet; backend default retained.")
   prior_validate_standardized_beliefs(object)
   additions = list(...)
   if (any(!vapply(additions, inherits, logical(1), "prior_belief"))) stop("All additions must be belief objects.")
   records = object$beliefs[[parameter]]
-  if (!is.numeric(remove) || anyNA(remove) || any(!is.finite(remove)) || any(remove != floor(remove)) || any(remove < 1 | remove > length(records)) || anyDuplicated(remove)) stop("Invalid removal numbers.")
+  if (!is.numeric(remove) ||
+      anyNA(remove) ||
+      any(!is.finite(remove)) ||
+      any(remove != floor(remove)) ||
+      any(remove < 1 |
+      remove > length(records)) ||
+      anyDuplicated(remove)) {
+    stop("Invalid removal numbers.")
+  }
   if (length(remove)) records = records[-remove]
+
+  # Convert fitting units while keeping the original belief metadata.
   for (r in additions) {
     r = prior_convert_belief(r, object, parameter)
     r$id = object$next_id
@@ -126,6 +196,8 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
     object$candidates[parameter] = list(list())
     return(prior_select_compatible(object))
   }
+
+  # Mathematical contradictions take precedence over family fitting.
   consistency = prior_check_probability_constraints(records)
   if (consistency$contradictory) {
     object$candidates[[parameter]] = list(valid = FALSE, status = "contradictory",
@@ -133,6 +205,7 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
     object$selected[parameter] = list(NULL)
     return(prior_select_compatible(object))
   }
+
   result = prior_fit_candidates(records, object$defaults[[parameter]])
   object$candidates[[parameter]] = result
   object$selected[parameter] = list(NULL)
