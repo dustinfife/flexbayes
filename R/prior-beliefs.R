@@ -4,7 +4,11 @@
 #'   real numeric value. The original comparison is retained.
 #' @param probability Probability of the comparison.
 #' @param mean,mode,sd Numeric moment or mode target; supply one.
-#' @param tolerance Absolute acceptance tolerance on the target scale.
+#' @param tolerance Absolute acceptance tolerance on the target scale (default
+#'   1e-6). This is a numerical matching rule, not inferred expert precision.
+#'   For approximate outcome answers, specify precision explicitly: location
+#'   tolerances use response units and probability tolerances use probability
+#'   units. update_outcome() never automatically widens this value.
 #' @param scale Units: original (default), standardized Gaussian slope,
 #'   probability for a logistic centered intercept, or response for a Poisson
 #'   centered intercept; odds_ratio for a plain logistic numeric slope or

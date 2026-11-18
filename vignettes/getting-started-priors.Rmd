@@ -328,6 +328,40 @@ built from a wider predictor grid is more informative than this one house.
 Use `response = "simulated"` to add individual-outcome variation; that is a
 different question from the beliefs above.
 
+### Keep the expert's answers
+
+Suppose a real estate professional gives these answers for two houses:
+
+```{r expert-interview, warning=FALSE}
+interview = house_priors +
+  update_outcome(
+    at = list(sqft = 1500, age = 30, bedrooms = 3),
+    belief(mode = 300000), belief(value < 250000, probability = .05)
+  ) +
+  update_outcome(
+    at = list(sqft = 3000, age = 30, bedrooms = 3),
+    belief(mode = 500000), belief(value < 400000, probability = .05)
+  )
+summary(interview)
+```
+
+Keep those answers, even when this model cannot represent them together.
+The summary identifies conflicts the mathematics can establish. A numerical
+failure is reported separately: a solver getting stuck doesn't make the
+expert wrong. Neither result discards the answers or selects an unverified
+prior. Ask about the **expected price** for each kind of house; uncertainty
+about one actual sale also includes variation this elicitation leaves out.
+
+The default `tolerance = 1e-6` is a numerical matching rule, not a claim that
+an expert knows prices to a millionth of a dollar. If the estimate means
+"about $300,000, to the nearest $10,000," record that precision explicitly:
+`belief(mode = 300000, tolerance = 5000)`. If a probability is reported to
+the nearest percentage point, `tolerance = .005` expresses that rounding.
+Choose these tolerances from the interview protocol, rather than widening
+them afterwards to make a model fit. They control how closely the model
+matches an answer; the probability statements describe uncertainty about
+expected prices. None of the recorded targets are rewritten.
+
 ### A little mathematics, if you want it
 
 With independent Normal priors, write the coefficient mean vector as

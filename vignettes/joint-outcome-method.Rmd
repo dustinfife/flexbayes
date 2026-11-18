@@ -34,9 +34,113 @@ $$
 
 At row $x_k$, $M_k\sim N(x_k^T\mu,\sum_j x_{kj}^2s_j^2)$.
 Mean and mode constraints therefore use $x_k^T\mu$; inequality probabilities
-use the corresponding Normal CDF (or its upper tail). Probabilities must
-lie strictly between zero and one at finite thresholds. No residual noise
+use the corresponding Normal CDF (or its upper tail). A finite Normal has
+probabilities strictly between zero and one at finite thresholds. A recorded
+boundary target is evaluated against its declared positive acceptance band;
+it is not claimed to be attained exactly. An interior point of that band may
+initialize the search without changing the recorded answer. No residual noise
 is added to these calculations.
+
+## Compatibility before reconciliation
+
+A failure of local optimization is not an impossibility certificate. The
+pre-check uses the actual centered rows $x_i$ and keeps every stated answer.
+It reports the configurations and within-configuration belief numbers involved;
+the reported set need not be a minimal conflicting subset.
+
+For $M_i\sim N(m_i,s_i^2)$, a location belief gives an interval for $m_i$.
+A lower-tail probability acceptance interval $[p_L,p_U]$ gives
+
+$$
+h-\Phi^{-1}(p_U)s_i\le m_i\le h-\Phi^{-1}(p_L)s_i.
+$$
+
+Upper-tail statements give the corresponding reversed bounds without
+subtracting a tiny tail probability from 1. Infinite quantile endpoints simply
+remove a side of the inequality. Intersecting these linear half-spaces in
+$(m_i,s_i)$ and eliminating $m_i$ yields necessary lower and upper SD bounds.
+Statements at identical centered rows are combined, even if entered through
+separate calls. These bounds use the **acceptance intervals**, not just exact
+point targets, and are rounded outward to avoid overstating incompatibility.
+
+Let $A_{ij}=x_{ij}^2$ and $v_j=\sigma_j^2$. Independent coefficient priors require
+
+$$
+Av\in[L,U],\qquad v\ge0,
+$$
+
+where $L,U$ are the implied variance bounds. Allowing zero variances here
+makes an outer feasibility set: an empty set also rules out strictly positive
+variances. The diagnostic does not declare a zero-only feasible boundary to
+be a valid independent-Normal prior.
+
+One certificate compares any two rows. If $A_{ij}\le cA_{kj}$ for every column,
+then $Var(M_i)\le c Var(M_k)$ for all nonnegative variances. A column with zero
+denominator and positive numerator makes this bound unavailable; it is not
+silently ignored. This handles arbitrary centered configurations, not only
+houses differing in one predictor.
+
+For the interview example with area centered at 2,014.94, houses of 1,500 and
+3,000 square feet have area coordinates -514.94 and 985.06. At common age and
+bedroom settings, other variance contributions have ratio 1. Therefore their
+SD ratio is at most $985.06/514.94\approx1.913$. Most likely prices of 300,000
+and 500,000 with 5% below 250,000 and 400,000 imply exact SDs
+$50000/|\Phi^{-1}(.05)|$ and $100000/|\Phi^{-1}(.05)|$: ratio 2. The actual
+check uses the SD ranges implied by the supplied tolerances, which still
+exclude 1.913 under the default strict matching rule. Wider **explicit**
+acceptance intervals can describe a different, compatible problem; they do
+not make the original point targets compatible.
+
+Pairwise ratios are not sufficient with many configurations. A convex
+squared-distance search looks for a separating vector $r$ satisfying
+
+$$
+A^T r\ge0,\qquad \sup_{y\in[L,U]}r^Ty<0.
+$$
+
+These inequalities independently contradict $Av\in[L,U]$ for every $v\ge0$.
+The search's convergence flag is never used as an impossibility proof. The
+witness inequalities and a separation margin are checked separately, after
+unit-invariant positive row/column scaling. Roundoff corrections are supported
+only on finite upper bounds; no infinite bound is replaced by a finite cap.
+For example, variances at centered coordinates -1, 0 and 2 must satisfy
+$V(2)=4V(-1)-3V(0)$ in an intercept-plus-slope model. Requested variances
+2, 1 and 3 violate this relation, even though pairwise ratio checks pass.
+
+Probability-consistency and location acceptance-interval checks remain.
+Nearly singular mean systems are not declared impossible by truncating small
+singular directions; their numerical resolution may instead remain unresolved.
+These are **necessary-condition diagnostics**, not a complete decision procedure
+for coupled means and variances: probability bands can couple $m_i$ and $s_i$
+more tightly than their separate bounds. Passing the checks does not prove
+compatibility. If no certificate is found and no feasible prior is verified,
+status is numerically unresolved, not mathematically incompatible. Solver or
+initialization errors retain the answers and block simulation, export and fit.
+Extremely narrow or ill-conditioned cases may remain unresolved.
+
+## Numerical matching versus interview precision
+
+The default absolute `belief()` tolerance remains `1e-6` for backward
+compatibility. It is not a model of how accurately an expert reports an answer.
+No default is silently expanded using the response magnitude or backend prior.
+For an expected-price mode reported to the nearest 10,000 units,
+`belief(mode=300000, tolerance=5000)` explicitly allows the model's mode to
+fall within that reporting interval. A probability reported to the nearest
+percentage point can use `tolerance=.005`. These tolerances describe matching
+precision, while the probability targets describe prior uncertainty. Establish
+them during elicitation, not after inspecting whether the model fits.
+
+Location tolerances have response units and must transform with those units;
+probability tolerances are unchanged by unit conversions. Optimizer convergence
+and certificate-roundoff thresholds are separate dimensionless quantities and
+do not widen the declared belief intervals. Strict constraints remain available
+through smaller explicit positive tolerances.
+
+A future context-scaled default (for example, a specified fraction of a fixed
+response SD) could preserve affine unit invariance, but would require a stated
+elicitation-precision policy. A percentage of the target alone changes meaning
+under response translations and near zero. Neither policy is introduced here;
+interview precision is left explicit for separate evaluation.
 
 ## Three priorities, without preference weights
 

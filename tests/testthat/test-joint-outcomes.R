@@ -140,7 +140,10 @@ test_that("unsupported families and selected prior families fail clearly", {
   p = joint_example(y~0+x)
   expect_error(p + update_outcome(list(x=6),belief(mean=10)),"intercept")
   p = joint_example()
-  expect_error(p + update_outcome(list(x=6,z=1),belief(value<10,probability=0)),"strictly between")
+  boundary = p + update_outcome(list(x=6,z=1),belief(value<10,probability=0))
+  expect_true(boundary$joint$status %in% c("compatible","reconciled"))
+  expect_equal(boundary$outcomes[[1]]$beliefs[[1]]$target,0)
+  expect_lte(boundary$joint$outcome$achieved,1e-6)
 })
 
 test_that("the Ames worked example meets location and probability tolerances in dollars", {

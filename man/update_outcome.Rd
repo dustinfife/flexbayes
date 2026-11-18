@@ -35,10 +35,23 @@ KL(adjusted prior || baseline prior). Locations and SDs use baseline-SD
 units; probabilities use probit (standard-Normal quantile) distances outside
 their original probability tolerance bands. Numerical tolerances determine
 satisfaction, not the relative importance of beliefs. Defaults enter
-only the last tier. This is a deterministic constrained numerical search,
+only the last tier. Compatibility checks first derive Normal moment
+acceptance bounds and test nonnegative coefficient-variance restrictions.
+A verified separating certificate establishes incompatibility; a failed
+numerical search alone does not. Passing these necessary checks does not
+prove full joint feasibility. All answers are retained when either check
+or reconciliation fails. This is a deterministic constrained numerical search,
 not a guarantee of global optimality. An unverified solution is never exported.
 Original coefficient-only selections define the baseline on every update,
 preventing successive outcome additions from moving the baseline.
+
+The default belief tolerance remains 1e-6, including for currency-valued
+locations. For a price estimate stated to the nearest 10000, an explicit
+tolerance=5000 may describe reporting precision. This is different from the
+uncertainty expressed by a probability belief. Record such precision as part
+of the interview, not as a way to force incompatible answers to fit.
+Probability targets of 0 or 1 use their declared positive acceptance bands;
+a finite Normal distribution cannot attain those probabilities exactly.
 
 The fixed-variance Mahalanobis projection initializes the numerical search.
 Positive affine changes of simple numeric predictor units preserve the

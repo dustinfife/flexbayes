@@ -20,10 +20,23 @@
 #' units; probabilities use probit (standard-Normal quantile) distances outside
 #' their original probability tolerance bands. Numerical tolerances determine
 #' satisfaction, not the relative importance of beliefs. Defaults enter
-#' only the last tier. This is a deterministic constrained numerical search,
+#' only the last tier. Compatibility checks first derive Normal moment
+#' acceptance bounds and test nonnegative coefficient-variance restrictions.
+#' A verified separating certificate establishes incompatibility; a failed
+#' numerical search alone does not. Passing these necessary checks does not
+#' prove full joint feasibility. All answers are retained when either check
+#' or reconciliation fails. This is a deterministic constrained numerical search,
 #' not a guarantee of global optimality. An unverified solution is never exported.
 #' Original coefficient-only selections define the baseline on every update,
 #' preventing successive outcome additions from moving the baseline.
+#'
+#' The default belief tolerance remains 1e-6, including for currency-valued
+#' locations. For a price estimate stated to the nearest 10000, an explicit
+#' tolerance=5000 may describe reporting precision. This is different from the
+#' uncertainty expressed by a probability belief. Record such precision as part
+#' of the interview, not as a way to force incompatible answers to fit.
+#' Probability targets of 0 or 1 use their declared positive acceptance bands;
+#' a finite Normal distribution cannot attain those probabilities exactly.
 #'
 #' The fixed-variance Mahalanobis projection initializes the numerical search.
 #' Positive affine changes of simple numeric predictor units preserve the
@@ -314,12 +327,28 @@ prior_joint_problem = function(object) {
     units=units,coefficient_units=coefficient_units,baseline=baseline,interior=.001)
 }
 
-prior_joint_conflict = function(problem) {
+prior_joint_basic_compatibility = function(problem) {
   for (i in seq_len(nrow(problem$X))) {
     rows = which(apply(problem$X,1,function(x) identical(unname(x),unname(problem$X[i,]))))
     records = Filter(function(r) r$configuration %in% rows,problem$outcome)
     check = prior_check_probability_constraints(records)
-    if (check$contradictory) return(check$message)
+    if (check$contradictory) return(list(issue="probability",message=check$message,
+      configurations=rows,records=which(vapply(problem$outcome,function(r)
+        r$configuration %in% rows && r$type=="probability",logical(1))),
+      explanation="The stated probabilities conflict, regardless of the selected coefficient distributions.",
+      technical=list(method="CDF probability consistency")))
+    location = Filter(function(r) r$type %in% c("mean","mode"),records)
+    if (length(location)>1L) {
+      lower = max(vapply(location,function(r) r$target-r$tolerance,numeric(1)))
+      upper = min(vapply(location,function(r) r$target+r$tolerance,numeric(1)))
+      unit = sqrt(sum((problem$X[i,]*problem$sd)^2))
+      if (lower-upper>1e-12*unit) return(list(issue="location",
+        message="Outcome location constraints are incompatible at the same predictor configuration.",
+        configurations=rows,records=which(vapply(problem$outcome,function(r)
+          r$configuration %in% rows && r$type %in% c("mean","mode"),logical(1))),
+        explanation="The requested expected-value intervals at the same predictor values do not overlap.",
+        technical=list(method="Disjoint location acceptance intervals",lower=lower,upper=upper)))
+    }
   }
   location = Filter(function(r) r$type %in% c("mean","mode"),problem$outcome)
   if (!length(location)) return(NULL)
@@ -333,12 +362,22 @@ prior_joint_conflict = function(problem) {
   b = (b-as.vector(A%*%problem$mean))/units
   A = scaled/units
   tol = tol/units
+  A = A[,colSums(abs(A))>0,drop=FALSE]
+  # Do not infer impossibility by truncating a tiny but nonzero singular
+  # direction: an ill-conditioned mean problem may still have a large solution.
+  if (nrow(A)<=ncol(A)) return(NULL)
+  singular = svd(A,nu=0,nv=0)$d
+  if (min(singular)<=sqrt(.Machine$double.eps)*max(singular)) return(NULL)
   projected = prior_joint_projection(A,b,rep(0,ncol(A)),rep(1,ncol(A)))
   residual = b-as.vector(A%*%projected)
   # A left-null-space certificate proves that the tolerance boxes cannot meet.
   if (max(abs(crossprod(A,residual))) < 1e-8*max(1,sum(abs(A)*max(abs(residual)))) &&
       abs(sum(residual*b)) > sum(abs(residual)*tol)+1e-9*max(1,sum(abs(residual*b))))
-    return("Outcome location constraints are incompatible with the model matrix, even within their tolerances.")
+    return(list(issue="location",message="Outcome location constraints are incompatible with the model matrix, even within their tolerances.",
+      configurations=unique(vapply(location,`[[`,integer(1),"configuration")),
+      records=which(vapply(problem$outcome,function(r) r$type %in% c("mean","mode"),logical(1))),
+      explanation="The requested expected values cannot all hold in this regression, even within their acceptance intervals.",
+      technical=list(method="Location tolerance-box separation",design=A,residual=residual)))
   NULL
 }
 
@@ -363,14 +402,40 @@ prior_joint_details = function(problem,theta,coefficient=FALSE) {
   details
 }
 
+# Boundary probability targets use an interior starting point of the declared
+# acceptance band. Verification still uses the original target and tolerance.
+prior_joint_start = function(problem) {
+  targets = vapply(problem$outcome,function(r) {
+    if (r$type!="probability") return(r$target)
+    probability = r$target
+    if (probability<=0 || probability>=1) probability =
+      (max(0,r$target-r$tolerance)+min(1,r$target+r$tolerance))/2
+    z = stats::qnorm(probability,lower.tail=r$operator %in% c("<","<="))
+    if (!is.finite(z)) stop("Probability acceptance band cannot be initialized at finite numerical precision.")
+    r$threshold-z*sqrt(sum((problem$X[r$configuration,]*problem$sd)^2))
+  },numeric(1))
+  A = problem$X[vapply(problem$outcome,`[[`,integer(1),"configuration"),,drop=FALSE]
+  location = prior_joint_projection(A,targets,problem$mean,problem$sd)
+  c((location-problem$mean)/problem$sd,rep(0,length(problem$sd)))
+}
+
+prior_joint_attempt = function(start, problem, ...) {
+  tryCatch(prior_joint_solve(start,problem,...),error=function(error)
+    list(par=start,convergence=1L,iterations=0L,violation=Inf,objective=Inf,
+      stationarity=Inf,message=conditionMessage(error)))
+}
+
 prior_joint_reconcile = function(object) {
   object$joint = NULL
   problem = prior_joint_problem(object)
-  conflict = prior_joint_conflict(problem)
+  assessment = tryCatch(prior_joint_compatibility(problem),error=identity)
+  certificate = if (inherits(assessment,"error")) NULL else assessment
+  conflict = if (is.null(certificate)) NULL else certificate$message
   base = rep(0,2*length(problem$mean))
   joint = list(baseline=problem$baseline,beliefs=object$beliefs,
     specifications=object$outcomes,design=problem$X,problem=problem,
-    status="unresolved",message=conflict)
+    status="unresolved",message=conflict,compatibility=certificate,
+    compatibility_note=if (inherits(assessment,"error")) conditionMessage(assessment) else NULL)
   if (!is.null(conflict)) {
     joint$status = "incompatible"
     object$joint = joint
@@ -379,19 +444,17 @@ prior_joint_reconcile = function(object) {
   }
   # A projection provides a deterministic, unit-aware starting point, including
   # single probability constraints that do not identify coefficient parameters.
-  targets = vapply(problem$outcome,function(r) {
-    if (r$type != "probability") return(r$target)
-    p = if (r$operator %in% c("<","<=")) r$target else 1-r$target
-    if (p<=0 || p>=1) stop("Joint Normal outcome beliefs require probabilities strictly between zero and one.")
-    r$threshold-stats::qnorm(p)*sqrt(sum((problem$X[r$configuration,]*problem$sd)^2))
-  },numeric(1))
-  A = problem$X[vapply(problem$outcome,`[[`,integer(1),"configuration"),,drop=FALSE]
-  location = prior_joint_projection(A,targets,problem$mean,problem$sd)
-  start = c((location-problem$mean)/problem$sd,rep(0,length(problem$sd)))
-  initial = prior_joint_solve(start,problem,tier=1L)
+  start = tryCatch(prior_joint_start(problem),error=identity)
+  if (inherits(start,"error")) {
+    joint$message = paste("Numerical initialization failed; no mathematical incompatibility was established.",conditionMessage(start))
+    object$joint = joint
+    warning(joint$message,call.=FALSE)
+    return(object)
+  }
+  initial = prior_joint_attempt(start,problem,tier=1L)
   if (!all(prior_joint_details(problem,initial$par)$satisfied) || initial$violation>1e-8) {
     problem$interior = 0
-    initial = prior_joint_solve(start,problem,tier=1L)
+    initial = prior_joint_attempt(start,problem,tier=1L)
   }
   joint$problem = problem
   stages = list(outcome=initial)
@@ -399,12 +462,12 @@ prior_joint_reconcile = function(object) {
   outcome = prior_joint_details(problem,theta)
   if (all(outcome$satisfied) && length(problem$coefficient)) {
     scale = max(1,prior_joint_coefficient_metric(theta,problem)$violation)
-    second = prior_joint_solve(c(theta,1),problem,tier=2L,coefficient_scale=scale)
+    second = prior_joint_attempt(c(theta,1),problem,tier=2L,coefficient_scale=scale)
     theta2 = head(second$par,length(base))
     limit = max(c(0,prior_joint_coefficient_metric(theta2,problem)$violation))
     # A relative numerical allowance opens the nearly optimal minimax face
     # for KL optimization. Zero sacrifice stays exactly zero.
-    third = prior_joint_solve(theta2,problem,tier=3L,coefficient_limit=limit*(1+1e-6))
+    third = prior_joint_attempt(theta2,problem,tier=3L,coefficient_limit=limit*(1+1e-6))
     joint$coefficient_limit = limit
     stages = c(stages,list(coefficient=second,KL=third))
     theta = third$par
@@ -429,7 +492,7 @@ prior_joint_reconcile = function(object) {
   parameters = prior_joint_parameters(theta,problem)
   verified = verified && all(is.finite(c(parameters$mean,parameters$sd))) && all(parameters$sd>0)
   if (!verified) {
-    joint$message = "No converged feasible joint prior was verified. Outcome beliefs may conflict, or numerical reconciliation failed; revise the beliefs or tolerances."
+    joint$message = "The numerical solver could not verify a feasible joint prior. No mathematical incompatibility was established; inspect diagnostics or revisit the model and acceptance tolerances."
     object$joint = joint
     warning(joint$message,call.=FALSE)
     return(object)
@@ -480,6 +543,8 @@ prior_joint_diagnostics = function(x, verified=TRUE) {
   if (!verified) prior_console_line("Unverified reconciliation: these diagnostics do not establish selected candidate priors.")
   print(object)
   if (!is.null(joint$message)) prior_console_line(joint$message)
+  if (!is.null(joint$compatibility_note)) prior_console_line(paste("Compatibility check unavailable:",joint$compatibility_note))
+  prior_joint_summary_conflict(object,TRUE)
   index = 0L
   for (specification in object$outcomes) {
     cat("\nAt:",if (length(specification$at)) paste(names(specification$at),unlist(specification$at),sep="=",collapse=", ") else "intercept only","\n")
@@ -509,6 +574,8 @@ prior_joint_diagnostics = function(x, verified=TRUE) {
   if (!is.null(joint$kl)) cat("\nKL(adjusted || baseline):",joint$kl,"\n")
   cat("Reference anchoring: coefficient-only selections, with backend defaults where not elicited.\n")
   cat("Underdetermined constraints use the stated minimax/KL criterion; numerical search does not certify a unique global optimum.\n")
+  for (stage in names(joint$stages)) if (!is.null(joint$stages[[stage]]$message))
+    prior_console_line(paste(stage,":",joint$stages[[stage]]$message))
   if (length(joint$stages)) print(do.call(rbind,lapply(joint$stages,function(s) data.frame(
     convergence=s$convergence,iterations=s$iterations,scaled_violation=s$violation,
     stationarity=s$stationarity,objective=s$objective))))
@@ -553,8 +620,10 @@ prior_joint_summary_outcomes = function(object, ready) {
       index = index+1L
       achieved = if (ready) prior_joint_summary_number(object$joint$outcome$achieved[index],
         probability=record$type=="probability") else "Not verified"
+      label = prior_joint_summary_belief(record,paste("expected",outcome))
+      if (!is.null(object$joint$compatibility)) label = paste0(length(rows)+1L,". ",label)
       rows[[length(rows)+1L]] = data.frame(
-        Belief=prior_joint_summary_belief(record,paste("expected",outcome)),
+        Belief=label,
         Requested=prior_joint_summary_number(record$target,probability=record$type=="probability"),
         Achieved=achieved)
     }
@@ -648,8 +717,10 @@ prior_joint_summary = function(x) {
   prior_joint_summary_outcomes(object,ready)
   prior_joint_summary_coefficients(object,ready)
   if (!ready) {
-    reason = if (object$joint$status %in% c("incompatible","unresolved"))
-      "Revise the outcome beliefs or inspect diagnostics before using these priors." else error
+    if (object$joint$status=="incompatible") prior_joint_summary_conflict(object)
+    reason = if (object$joint$status=="unresolved")
+      "The solver could not verify a feasible prior; this does not prove your answers are impossible." else if (object$joint$status=="incompatible")
+      "Review the conflicting answers or the model's restrictions before using these priors." else error
     prior_console_line(paste("Not ready to use:",reason))
   }
   if (x$diagnostics) prior_joint_diagnostics(x,ready) else
