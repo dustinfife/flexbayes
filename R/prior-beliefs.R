@@ -1,24 +1,201 @@
-#' Describe a prior belief
-#' @param expression A comparison with value on the left. The threshold on the
-#'   right is evaluated in the caller's environment and must yield one finite
-#'   real numeric value. The original comparison is retained.
-#' @param probability Probability of the comparison.
-#' @param mean,mode,sd Numeric moment or mode target; supply one.
-#' @param tolerance Absolute acceptance tolerance on the target scale (default
-#'   1e-6). This is a numerical matching rule, not inferred expert precision.
-#'   For approximate outcome answers, specify precision explicitly: location
-#'   tolerances use response units and probability tolerances use probability
-#'   units. update_outcome() never automatically widens this value.
-#' @param scale Units: original (default), standardized Gaussian slope,
-#'   probability for a logistic centered intercept, or response for a Poisson
-#'   centered intercept; odds_ratio for a plain logistic numeric slope or
-#'   rate_ratio for a plain Poisson numeric slope. Outcome means, modes and SDs constrain the induced
-#'   distribution, not a naively transformed link-scale moment.
-#' When supplied to update_outcome(), mean/mode and probability beliefs refer
-#' to the expected Gaussian response at the specified predictors, not an
-#' individual noisy observation. Joint reconciliation may relax original
-#' coefficient beliefs; their statements and diagnostics remain available.
-#' @return A prior_belief record.
+#' Specify properties of a prior distribution
+#'
+#' Describe what you believe using familiar quantities: a mean, a most likely
+#' value (mode), a standard deviation, a median, or a probability. flexbayes
+#' uses these statements as constraints when selecting a prior distribution.
+#' One belief may leave several distributions possible; combine beliefs to
+#' describe both where the distribution belongs and how widely it spreads.
+#'
+#' @param expression A comparison with `value` on the left, such as
+#'   `value < 100`, paired with `probability`. Supported operators are `<`,
+#'   `<=`, `>`, and `>=`. Omit this argument when supplying `mean`, `mode`,
+#'   or `sd`. The threshold can be a number, variable, or numeric expression.
+#' @param probability The probability assigned to the comparison in
+#'   `expression`: one finite number between 0 and 1, inclusive.
+#' @param mean The desired mean of the distribution, as one finite number.
+#' @param mode The desired most likely value of the distribution, as one
+#'   finite number. This is not necessarily its mean.
+#' @param sd The desired standard deviation of the distribution, as one
+#'   positive finite number. This describes spread, not a location.
+#' @param tolerance Positive finite absolute numerical acceptance tolerance,
+#'   measured in the target's units. The default is `1e-6`. This controls how closely
+#'   a candidate must match the stated target; it is not an estimate of the
+#'   researcher's uncertainty. See "Matching an answer" below.
+#' @param scale The scale on which the belief is expressed. Defaults to
+#'   `"original"`. Other choices are `"standardized"`, `"probability"`,
+#'   `"response"`, `"odds_ratio"`, and `"rate_ratio"`, with the model and
+#'   parameter restrictions described below.
+#'
+#' @details
+#' ## What does a belief say?
+#'
+#' `belief(mean = 100)` places the mean at 100. `belief(mode = 100)` places
+#' the peak there instead. `belief(sd = 20)` describes the width, without
+#' saying where the distribution should peak.
+#'
+#' For probability statements, `value` stands for the uncertain quantity.
+#' `belief(value < 150, probability = .95)` assigns 95% probability below
+#' 150. It does not say that 95% of people have outcomes below 150 when the
+#' belief concerns a regression coefficient.
+#'
+#' `belief(value < 100, probability = .50)` specifies 100 as a median for
+#' a continuous distribution. There is no separate `median` argument.
+#' Strict and inclusive comparisons are retained as entered; they need not
+#' mean the same thing for a distribution with probability mass at the threshold.
+#'
+#' Each call supplies either one of `mean`, `mode`, or `sd`, or one comparison
+#' together with `probability`. Only the threshold expression is evaluated,
+#' in the calling environment; it must give one finite real numeric value.
+#' The comparison itself is captured, and its original expression is retained.
+#'
+#' ## Combining beliefs
+#'
+#' `belief()` records a statement; it does not fit a distribution by itself.
+#' Add statements to an identified prior object with [update_priors()], or
+#' use [`update()`][update.flexbayes_priors] to revise existing beliefs. Adding beliefs
+#' keeps earlier ones. To remove a belief, use its current displayed number
+#' within the parameter's belief list.
+#'
+#' A mode alone does not determine a distribution's width. When supported,
+#' flexbayes uses the backend's default prior as a disclosed reference to
+#' resolve missing information. That is different from knowledge supplied by
+#' the researcher. Use `summary(priors, diagnostics = TRUE)` to inspect the
+#' reference choice and the achieved constraints.
+#'
+#' More beliefs do not guarantee a fit. Contradictory statements are retained
+#' and reported, as are otherwise consistent statements that the supported
+#' families or backend cannot represent. A valid belief record does not by
+#' itself establish that a usable prior exists. Residual-scale (`sigma`)
+#' elicitation is not currently supported.
+#'
+#' ## Matching an answer
+#'
+#' A standard deviation or probability belief describes uncertainty about the
+#' quantity. `tolerance` instead describes how closely the fitted distribution
+#' must match that answer. It is separate from optimizer convergence settings.
+#' The absolute default `1e-6` is a numerical matching rule, not inferred
+#' precision in an expert's judgment. It is not silently widened.
+#'
+#' If an expected-price estimate means "about 300,000, to the nearest 10,000,"
+#' `belief(mode = 300000, tolerance = 5000)` records that precision explicitly.
+#' A probability reported to the nearest percentage point can use
+#' `tolerance = .005`. Establish that precision during elicitation, rather
+#' than widening tolerances afterwards to make conflicting answers fit.
+#' Location and SD tolerances use the entered units; probability tolerances
+#' use probability units. Transform location and SD tolerances along with
+#' their targets when changing units.
+#'
+#' ## Available scales
+#'
+#' \describe{
+#'   \item{`"original"`}{The model's coefficient units: response units per
+#'   predictor unit for Gaussian slopes, log-odds for logistic coefficients,
+#'   and log-rates for Poisson coefficients. An intercept refers to the
+#'   recorded model-matrix centering values when the model has an intercept.
+#'   For example, `belief(mode = 3)` can describe a Gaussian slope.
+#'   With `update_outcome()`, this same scale refers to expected-response
+#'   units at the specified predictor values instead.}
+#'   \item{`"standardized"`}{A fully standardized Gaussian identity-model
+#'   slope: `beta_star = beta * sd(x) / sd(y)`. For example,
+#'   `belief(mode = .3, scale = "standardized")`. SDs use R's `sd()`
+#'   convention and the observed estimation sample. Only plain numeric
+#'   slopes without interactions are supported, not intercepts, factor
+#'   coefficients, or transformed terms. Predictor and outcome SDs must be
+#'   positive and finite. The beliefs are converted to coefficient units;
+#'   model data are not standardized.}
+#'   \item{`"probability"`}{The success probability at the centered-intercept
+#'   reference of a binomial logit model. Only `"(Intercept)"` is supported.
+#'   For example, `belief(value < .8, probability = .95,
+#'   scale = "probability")` puts 95% prior probability below a success
+#'   probability of .8. Mean and mode targets must be strictly between 0
+#'   and 1, SD targets strictly between 0 and .5, and comparison thresholds
+#'   between 0 and 1, inclusive.}
+#'   \item{`"response"`}{The expected count at the centered-intercept
+#'   reference of a Poisson log model. Only `"(Intercept)"` is supported.
+#'   For example, `belief(mean = 3, scale = "response")` describes the
+#'   mean of the distribution of expected counts, not a link-scale mean.
+#'   Moment and mode targets must be positive; comparison thresholds may
+#'   be zero. This does not describe individual count variability.}
+#'   \item{`"odds_ratio"`}{The multiplicative change in odds for a one-unit
+#'   increase in a plain numeric slope of a binomial logit model, holding
+#'   other predictors fixed. For example, `belief(value < 2,
+#'   probability = .95, scale = "odds_ratio")`. Intercepts, factors,
+#'   interactions, transformed terms, and predictors also used in another
+#'   transformation are unsupported. Targets and thresholds must be positive.}
+#'   \item{`"rate_ratio"`}{The multiplicative change in expected count for a
+#'   one-unit increase in a plain numeric slope of a Poisson log model.
+#'   For example, `belief(mode = 1.5, scale = "rate_ratio")`. The same
+#'   parameter restrictions and positive-target requirements as for
+#'   `"odds_ratio"` apply.}
+#' }
+#'
+#' Beliefs on different supported scales can be combined for the same parameter.
+#' On transformed scales, means, modes, and SDs describe the induced
+#' distribution, not simply a transformation of a link-scale moment. Requested
+#' moments or modes must exist for the candidate family. Not every combination
+#' can be represented; a single probability-scale mode can remain unresolved
+#' when the backend-default spread cannot support it as a unique global mode.
+#'
+#' ## Beliefs about expected outcomes
+#'
+#' Supply the same `belief()` records to [update_outcome()] to describe a
+#' conditional expected response at a chosen predictor configuration. This
+#' currently requires a Gaussian identity model with an intercept, numeric
+#' predictors, and independent Normal coefficient priors. Only original-scale
+#' mean, mode, and probability beliefs are supported there, not SD beliefs.
+#' These statements concern the expected response, not an individual noisy
+#' observation. Reconciliation can change coefficient priors and compromise
+#' earlier coefficient beliefs; their original statements remain available.
+#' See [update_outcome()] for the reconciliation priorities and limitations.
+#'
+#' @return A `prior_belief` record that can be supplied to [update_priors()],
+#'   [`update()`][update.flexbayes_priors], or [update_outcome()].
+#' @seealso [identify_priors()], [plot.flexbayes_priors()], [check_prior()]
+#' @examples
+#' # These are separate statements, not one combined specification.
+#' belief(mean = 100)
+#' belief(mode = 100)
+#' belief(sd = 20)
+#' belief(value < 150, probability = .95)
+#' belief(value > 200, probability = .10)
+#'
+#' # A median of 100 for a continuous distribution; no median argument needed.
+#' belief(value < 100, probability = .50)
+#'
+#' # Thresholds can also use variables or ordinary numeric expressions.
+#' upper = 150
+#' belief(value <= upper, probability = .95)
+#' belief(value > qt(.10, df = 7), probability = .90)
+#'
+#' # Each alternative scale has model and parameter restrictions (see Details).
+#' belief(mode = .3, scale = "standardized")
+#' belief(value < .8, probability = .95, scale = "probability")
+#' belief(mean = 3, scale = "response")
+#' belief(value < 2, probability = .95, scale = "odds_ratio")
+#' belief(mode = 1.5, scale = "rate_ratio")
+#'
+#' # Model examples use the verified rstanarm 2.32.2 default-prior adapter.
+#' if (requireNamespace("rstanarm", quietly = TRUE) &&
+#'     utils::packageVersion("rstanarm") == "2.32.2") {
+#'   d = data.frame(x = 1:6, y = c(200, 320, 470, 630, 760, 920))
+#'   priors = identify_priors(y ~ x, data = d)
+#'   priors = priors +
+#'     update_priors(
+#'       "x",
+#'       belief(mode = 150),
+#'       belief(value < 100, probability = .10)
+#'     )
+#'   print(summary(priors))
+#'
+#'   # Describe the expected response at x = 4, excluding observation noise.
+#'   outcome_priors = identify_priors(y ~ x, data = d) +
+#'     update_outcome(
+#'       at = list(x = 4),
+#'       belief(mode = 650),
+#'       belief(value < 550, probability = .05)
+#'     )
+#'   print(summary(outcome_priors))
+#' }
 #' @export
 belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd = NULL, tolerance = 1e-6, scale = "original") {
   # Check the requested units before interpreting the belief.
