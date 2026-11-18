@@ -17,9 +17,9 @@ prior_plot_outcome = function(x, response, max_display) {
   p = ggplot2::ggplot(data, ggplot2::aes(x = value))
   discrete = response == "simulated" && x$metadata$family$family %in% c("binomial", "poisson")
   if (discrete) {
-    p = p + ggplot2::geom_bar(ggplot2::aes(y = ggplot2::after_stat(prop), group = 1), fill = NA, colour = "black")
+    p = p + ggplot2::geom_bar(ggplot2::aes(y = ggplot2::after_stat(prop), group = 1), fill = "white", colour = "black")
   } else {
-    p = p + ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)), bins = 30, fill = NA, colour = "black")
+    p = p + ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)), bins = 30, fill = "white", colour = "black")
   }
   outcome = prior_plot_outcome_name(x)
   p + ggplot2::theme_bw() + ggplot2::labs(
