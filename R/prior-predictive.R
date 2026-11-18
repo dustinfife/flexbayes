@@ -104,9 +104,13 @@ prior_simulate_gaussian = function(expected, sigma) {
 }
 
 #' Plot prior predictive distributions and relationships
+#'
+#' Plot outcome distributions, expected relationships, or per-case intervals
+#' from `check_prior()`. For individual parameter densities, use `plot(priors)`
+#' or `plot(priors, parameter = "x")` instead.
 #' @param x A flexbayes_prior_predictive object.
 #' @param type Outcome distribution (default), model relationships, or interval
-#'   summaries. Legacy both, expected and simulated types remain interval aliases.
+#'   summaries: outcome, model, or interval.
 #' @param response simulated (default for outcome), expected (default for model),
 #'   or both (interval only; its default).
 #' @param formula Optional literal flexplot visualization formula for model plots.
@@ -162,27 +166,28 @@ prior_simulate_gaussian = function(expected, sigma) {
 #'   excessive grids and unsupported flexplot configurations fail clearly.
 #'   Old saved checks need to be regenerated for model plotting.
 #' @return A genuine ggplot object. Plotting does not alter stored simulations.
+#' @seealso [plot.flexbayes_priors()], [check_prior()]
 #' @examples
 #' \dontrun{
+#' priors = identify_priors(mpg ~ wt + cyl, data = mtcars)
+#' plot(priors)
+#' plot(priors, parameter = "wt")
 #' check = check_prior(priors, n = 500)
 #' plot(check, type = "outcome")
+#' plot(check, type = "outcome", response = "expected")
 #' plot(check, type = "model") # median and central 90% prior interval
 #' plot(check, type = "model", display = "draws")
 #' plot(check, type = "model", display = "both")
-#' plot(check, type = "model", formula = price ~ sqft | bedrooms)
+#' plot(check, type = "model", formula = mpg ~ wt | cyl)
 #' plot(check, type = "interval")
+#' plot(check, type = "interval", response = "expected")
 #' }
 #' @export
-plot.flexbayes_prior_predictive = function(x, type = c("outcome", "model", "interval", "both", "expected", "simulated"),
+plot.flexbayes_prior_predictive = function(x, type = c("outcome", "model", "interval"),
     response = NULL, formula = NULL, draws = 30, max_display = 100000,
     prediction.alpha = .15, bins = 3, breaks = NULL, labels = NULL,
     display = c("interval", "draws", "both"), ...) {
   type = match.arg(type)
-  if (type %in% c("both", "expected", "simulated")) {
-    if (!is.null(response)) stop("Do not combine a legacy interval alias with response.")
-    response = type
-    type = "interval"
-  }
   if (type == "interval") return(prior_plot_interval(x, if (is.null(response)) "both" else match.arg(response, c("both", "expected", "simulated"))))
   if (is.null(response)) response = if (type == "model") "expected" else "simulated"
   response = match.arg(response, c("expected", "simulated"))
@@ -192,8 +197,8 @@ plot.flexbayes_prior_predictive = function(x, type = c("outcome", "model", "inte
   prior_plot_model(x, response, formula, draws, max_display, prediction.alpha, bins, breaks, labels, match.arg(display))
 }
 
-prior_plot_interval = function(x, type = "both") {
-  types = if (type == "both") c("expected", "simulated") else type
+prior_plot_interval = function(x, response = "both") {
+  types = if (response == "both") c("expected", "simulated") else response
   rows = list()
   for (kind in types) {
     values = x[[kind]]

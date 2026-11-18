@@ -154,6 +154,11 @@ not change an existing belief.
 
 ### Gaussian prior predictive checking
 
+`plot(p)` shows the individual parameter priors; add `parameter = "x"` to
+inspect one parameter and its candidates. Plotting a `check_prior(p)` result
+shows what those priors imply for outcomes (`type = "outcome"`) or expected
+relationships (`type = "model"`). Use `type = "interval"` for per-case summaries.
+
 ```r
 set.seed(42)
 checks = check_prior(p, n = 1000)
@@ -204,9 +209,15 @@ model-plot y axes; prediction-only axis training requires a flexplot extension.
 
 `type = "interval"` preserves the original medians and central 90% intervals
 for expected responses and individual observations. Its row numbers identify
-cases, not a continuous predictor axis. The legacy `type = "expected"`,
-`"simulated"`, and `"both"` remain interval aliases. `set.seed()` controls check
-sampling. Checks refuse contradictory, unselected, unsupported, improper,
+cases, not a continuous predictor axis. Use `response = "expected"` or
+`response = "simulated"` with `type = "interval"` to select one panel; the
+default shows both. These response controls also work with outcome and model
+plots. `display = "both"` combines individual relationships with summarized
+prior intervals in model plots. `set.seed()` controls check sampling.
+
+The former `type` aliases `"both"`, `"expected"`, and `"simulated"` have been
+removed. Replace them with `type = "interval"` and, for a single panel, the
+matching `response` value. Checks refuse contradictory, unselected, unsupported, improper,
 unsampleable or backend-incompatible prior specifications. Gaussian identity, binary logit and Poisson log checks are implemented; residual-scale elicitation remains unavailable.
 
 ## Loading fitted example datasets

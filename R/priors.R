@@ -151,6 +151,11 @@ print.summary.flexbayes_priors = function(x, ...) {
 }
 
 #' Plot selected and candidate prior densities
+#'
+#' `plot(priors)` shows the selected distribution for each parameter. Supply
+#' `parameter` to compare acceptable candidates for one coefficient, such as
+#' `plot(priors, parameter = "x")`. These are parameter densities; to examine
+#' their implications for outcomes and relationships, plot a `check_prior()` result.
 #' @param x Prior specification.
 #' @param parameter Optional parameter name. When supplied, compare acceptable candidates.
 #' @param scale Plot in original, standardized, probability, response, odds_ratio
@@ -160,6 +165,13 @@ print.summary.flexbayes_priors = function(x, ...) {
 #'   include the transformation Jacobian.
 #' @param ... Reserved.
 #' @return A ggplot object.
+#' @seealso [plot.flexbayes_prior_predictive()], [check_prior()]
+#' @examples
+#' \dontrun{
+#' priors = identify_priors(mpg ~ wt, data = mtcars)
+#' plot(priors)
+#' plot(priors, parameter = "wt")
+#' }
 #' @export
 plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
   if (length(scale) != 1L || !is.character(scale) || is.na(scale) || !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")

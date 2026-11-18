@@ -149,3 +149,18 @@ test_that("Student t tail policy is centralized and fixed", {
   expect_equal(candidate$df, prior_student_t_policy()$df)
   expect_equal(prior_distribution_operation(candidate, "sd"), p$defaults$x$sd)
 })
+
+test_that("individual prior plots render all parameters or one parameter independently of checks", {
+  p = prior_example()
+  p = update(p, parameter = "x", belief(mean = 0), belief(sd = 1))
+  before = p
+  all_plot = plot(p)
+  single_plot = plot(p, parameter = "x")
+  expect_setequal(unique(all_plot$data$parameter), names(p$selected))
+  expect_equal(unique(single_plot$data$parameter), "x")
+  expect_true(all(is.finite(all_plot$data$density)))
+  expect_true(all(is.finite(single_plot$data$density)))
+  expect_s3_class(ggplot2::ggplotGrob(all_plot + ggplot2::theme_bw()), "gtable")
+  expect_s3_class(ggplot2::ggplotGrob(single_plot + ggplot2::theme_bw()), "gtable")
+  expect_identical(p, before)
+})

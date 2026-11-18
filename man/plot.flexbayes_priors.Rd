@@ -23,5 +23,18 @@ include the transformation Jacobian.}
 A ggplot object.
 }
 \description{
-Plot selected and candidate prior densities
+\code{plot(priors)} shows the selected distribution for each parameter. Supply
+\code{parameter} to compare acceptable candidates for one coefficient, such as
+\code{plot(priors, parameter = "x")}. These are parameter densities; to examine
+their implications for outcomes and relationships, plot a \code{check_prior()} result.
+}
+\examples{
+\dontrun{
+priors = identify_priors(mpg ~ wt, data = mtcars)
+plot(priors)
+plot(priors, parameter = "wt")
+}
+}
+\seealso{
+\code{\link[=plot.flexbayes_prior_predictive]{plot.flexbayes_prior_predictive()}}, \code{\link[=check_prior]{check_prior()}}
 }

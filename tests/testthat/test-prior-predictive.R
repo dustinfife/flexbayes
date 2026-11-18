@@ -69,8 +69,8 @@ test_that("t sampling uses selected scale and plots use the same mathematics", {
   expect_equal(rows$density, dt(rows$value, 7))
   expect_s3_class(plot(result) + ggplot2::theme_bw(), "ggplot")
   expect_equal(length(unique(plot(result, type = "interval")$data$response)), 2)
-  expect_equal(unique(plot(result, type = "expected")$data$response), "Expected outcome")
-  expect_equal(unique(plot(result, type = "simulated")$data$response), "Predicted outcome")
+  expect_equal(unique(plot(result, type = "interval", response = "expected")$data$response), "Expected outcome")
+  expect_equal(unique(plot(result, type = "interval", response = "simulated")$data$response), "Predicted outcome")
   expect_s3_class(plot(check_prior(p, 1, data.frame(x = 0))), "ggplot")
 })
 

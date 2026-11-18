@@ -102,10 +102,18 @@ test_that("model curves use stored draws, not observed outcomes or new RNG draws
   expect_s3_class(ggplot2::ggplotGrob(plot(new, type = "model", display = "draws", formula = y ~ x)), "gtable")
 })
 
-test_that("interval aliases and malformed requests remain informative", {
+test_that("only primary predictive types are accepted and responses select interval panels", {
   x = renderer_check()
-  expect_equal(plot(x, type = "interval")$data, plot(x, type = "both")$data)
-  expect_equal(plot(x, type = "interval", response = "expected")$data, plot(x, type = "expected")$data)
+  expect_equal(eval(formals(plot.flexbayes_prior_predictive)$type), c("outcome", "model", "interval"))
+  for (alias in c("both", "expected", "simulated")) expect_error(plot(x, type = alias), "arg")
+  expect_equal(plot(x, type = "interval")$data, plot(x, type = "interval", response = "both")$data)
+  expected = plot(x, type = "interval", response = "expected")$data
+  simulated = plot(x, type = "interval", response = "simulated")$data
+  expect_equal(unique(expected$response), "Expected outcome")
+  expect_equal(unique(simulated$response), "Predicted outcome")
+  combined = plot(x, type = "interval")$data
+  expect_equal(expected, combined[combined$response == "Expected outcome", ])
+  expect_equal(simulated, combined[combined$response == "Predicted outcome", ])
   expect_error(plot(x, max_display = 0), "positive integer")
   expect_error(plot(x, response = "wrong"))
   require_draw_renderer()
@@ -211,7 +219,7 @@ test_that("interval styling and facet labels preserve original numerical interva
     expect_equal(p$theme, ggplot2::theme_bw())
     expect_equal(unique(p$data$response), c("Expected outcome", "Predicted outcome"))
     for (kind in c("expected", "simulated")) {
-      q = plot(x, type = kind)
+      q = plot(x, type = "interval", response = kind)
       target = t(apply(x[[kind]], 2, quantile, probs = c(.05, .5, .95), names = FALSE))
       expect_equal(as.matrix(q$data[c("lower", "median", "upper")]), target, ignore_attr = TRUE)
     }

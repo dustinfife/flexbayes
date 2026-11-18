@@ -123,8 +123,10 @@ The summary numbers our beliefs and compares requested and achieved
 values. Candidates must satisfy every tolerance. The package ranks
 acceptable candidates and selects one the backend can represent.
 
-The plot compares acceptable candidates for `x` and marks the selected
-one. It's a regular ggplot object; you can add `ggplot2::theme_bw()`.
+Use `plot(priors)` to see the selected distributions for all parameters.
+Here, `parameter = "x"` compares acceptable candidates for the study-hour
+slope and marks the selected one. It's a regular ggplot object; you can
+add `ggplot2::theme_bw()`.
 The other parameters still have their backend defaults. We'll need to
 think about those too: one reassuring density can't tell us what the
 whole model will predict.
@@ -193,8 +195,10 @@ check = check_prior(priors, n = 500, newdata = prediction_cases)
 plot(check, type = "interval")
 ```
 
-By default, `plot(check)` shows the distribution of simulated scores. Here
-we asked for interval panels so we can compare the two kinds of uncertainty.
+The earlier `plot(priors)` showed parameter distributions.
+`plot(check, type = "outcome")` shows the scores those priors make plausible;
+this is the default for `plot(check)`. Here we asked for interval panels
+so we can compare the two kinds of uncertainty.
 Use `plot(check, type = "model")` to see the median expected relationship and
 a central 90% prior interval, based on all the stored draws. This band describes
 uncertainty about expected scores, not differences between individual students.
@@ -209,9 +213,9 @@ still differ.
 
 Both panels show medians and central 90% intervals. Rows 1--5 mean 0,
 2.5, 5, 7.5, and 10 study hours, each with 2 practice sessions. The axis
-labels cases, not hours. Use `plot(check, type = "expected")` or
-`type = "simulated"` to inspect one panel. We'll keep these cases for
-the next check.
+labels cases, not hours. Use `type = "interval", response = "expected"`
+or `response = "simulated"` to inspect one panel. We'll keep these cases
+for the next check.
 
 Suppose this is a 100-point test, but our prior predictive check
 suggests that scores of 140 are plausible. That's a problem. Students

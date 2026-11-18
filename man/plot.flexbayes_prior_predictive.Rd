@@ -6,7 +6,7 @@
 \usage{
 \method{plot}{flexbayes_prior_predictive}(
   x,
-  type = c("outcome", "model", "interval", "both", "expected", "simulated"),
+  type = c("outcome", "model", "interval"),
   response = NULL,
   formula = NULL,
   draws = 30,
@@ -23,7 +23,7 @@
 \item{x}{A flexbayes_prior_predictive object.}
 
 \item{type}{Outcome distribution (default), model relationships, or interval
-summaries. Legacy both, expected and simulated types remain interval aliases.}
+summaries: outcome, model, or interval.}
 
 \item{response}{simulated (default for outcome), expected (default for model),
 or both (interval only; its default).}
@@ -51,7 +51,9 @@ summarize prior uncertainty in the expected response, not individual outcomes.}
 A genuine ggplot object. Plotting does not alter stored simulations.
 }
 \description{
-Plot prior predictive distributions and relationships
+Plot outcome distributions, expected relationships, or per-case intervals
+from \code{check_prior()}. For individual parameter densities, use \code{plot(priors)}
+or \code{plot(priors, parameter = "x")} instead.
 }
 \details{
 Outcome plots pool across draws and the supplied predictor cases,
@@ -97,12 +99,20 @@ Old saved checks need to be regenerated for model plotting.
 }
 \examples{
 \dontrun{
+priors = identify_priors(mpg ~ wt + cyl, data = mtcars)
+plot(priors)
+plot(priors, parameter = "wt")
 check = check_prior(priors, n = 500)
 plot(check, type = "outcome")
+plot(check, type = "outcome", response = "expected")
 plot(check, type = "model") # median and central 90\% prior interval
 plot(check, type = "model", display = "draws")
 plot(check, type = "model", display = "both")
-plot(check, type = "model", formula = price ~ sqft | bedrooms)
+plot(check, type = "model", formula = mpg ~ wt | cyl)
 plot(check, type = "interval")
+plot(check, type = "interval", response = "expected")
 }
+}
+\seealso{
+\code{\link[=plot.flexbayes_priors]{plot.flexbayes_priors()}}, \code{\link[=check_prior]{check_prior()}}
 }
