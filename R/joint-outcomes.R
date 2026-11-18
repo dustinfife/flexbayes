@@ -15,13 +15,22 @@
 #'
 #' Reconciliation has three priorities: satisfy outcome beliefs within their
 #' tolerances; minimize the largest coefficient-belief violation beyond its
-#' tolerance; then minimize KL(adjusted prior || baseline prior). Defaults enter
+#' tolerance in dimensionless coordinates; then minimize
+#' KL(adjusted prior || baseline prior). Locations and SDs use baseline-SD
+#' units; probabilities use probit (standard-Normal quantile) distances outside
+#' their original probability tolerance bands. Numerical tolerances determine
+#' satisfaction, not the relative importance of beliefs. Defaults enter
 #' only the last tier. This is a deterministic constrained numerical search,
 #' not a guarantee of global optimality. An unverified solution is never exported.
 #' Original coefficient-only selections define the baseline on every update,
 #' preventing successive outcome additions from moving the baseline.
 #'
 #' The fixed-variance Mahalanobis projection initializes the numerical search.
+#' Positive affine changes of simple numeric predictor units preserve the
+#' centered independent-Normal structure. Equivalent targets, thresholds and
+#' absolute tolerances give equivalent reconciliations up to numerical accuracy.
+#' This does not extend to transformations mixing coefficient columns and
+#' inducing covariance. Outcome unit changes must transform tolerances too.
 #' General reconciliation may change both means and SDs. Underidentified problems
 #' are resolved by the stated preference criterion, not by claiming identification.
 #' Relaxed coefficient beliefs produce a warning and remain visible in
@@ -122,6 +131,40 @@ prior_joint_kl = function(theta, problem) {
   list(value=sum(u^2+expm1(2*l)-2*l)/2, gradient=c(u,expm1(2*l)))
 }
 
+# Belief sacrifices are distances outside acceptance bands in dimensionless
+# coordinates. A probability's probit is its threshold in Normal SD units;
+# use it directly instead of inverting a rounded/saturated CDF value.
+prior_joint_coefficient_metric = function(theta, problem) {
+  records = problem$coefficient
+  raw = prior_joint_values(theta, problem, TRUE)
+  parameters = prior_joint_parameters(theta, problem)
+  p = length(problem$mean)
+  value = lower = upper = numeric(length(records))
+  gradient = raw$gradient
+  for (i in seq_along(records)) {
+    record = records[[i]]
+    j = record$parameter
+    if (record$type != "probability") {
+      value[i] = (raw$value[i]-record$target)/problem$sd[j]
+      lower[i] = -record$tolerance/problem$sd[j]
+      upper[i] = -lower[i]
+      gradient[i,] = gradient[i,]/problem$sd[j]
+      next
+    }
+    sign = if (record$operator %in% c("<", "<=")) 1 else -1
+    z = sign*(record$threshold-parameters$mean[j])/parameters$sd[j]
+    target = stats::qnorm(record$target)
+    value[i] = z-target
+    lower[i] = stats::qnorm(max(0,record$target-record$tolerance))-target
+    upper[i] = stats::qnorm(min(1,record$target+record$tolerance))-target
+    gradient[i,] = 0
+    gradient[i,j] = -sign*problem$sd[j]/parameters$sd[j]
+    gradient[i,p+j] = -z
+  }
+  list(value=value,lower=lower,upper=upper,gradient=gradient,
+    violation=pmax(0,lower-value,value-upper))
+}
+
 # Scalar objective and inequalities (g <= 0), with analytic derivatives.
 prior_joint_system = function(theta, problem, tier, coefficient_limit=0, coefficient_scale=1) {
   p = length(problem$mean)*2L
@@ -135,17 +178,19 @@ prior_joint_system = function(theta, problem, tier, coefficient_limit=0, coeffic
   width = tolerance*(1-problem$interior)
   g = c((difference-width)/problem$units,(-difference-width)/problem$units)
   jacobian = rbind(outcome$gradient/problem$units,-outcome$gradient/problem$units)
-  coefficient = prior_joint_values(parameters, problem, TRUE)
   if (length(problem$coefficient) && tier != 1L) {
-    ct = vapply(problem$coefficient, `[[`, numeric(1), "target")
-    tol = vapply(problem$coefficient, `[[`, numeric(1), "tolerance")
-    delta = coefficient$value-ct
-    allowance = tol*(1+if (tier==2L) coefficient_scale*theta[p+1L] else coefficient_limit)
-    g = c(g,(delta-allowance)/problem$coefficient_units,(-delta-allowance)/problem$coefficient_units)
-    jacobian = rbind(jacobian,coefficient$gradient/problem$coefficient_units,-coefficient$gradient/problem$coefficient_units)
+    coefficient = prior_joint_coefficient_metric(parameters, problem)
+    upper = which(is.finite(coefficient$upper))
+    lower = which(is.finite(coefficient$lower))
+    allowance = if (tier==2L) coefficient_scale*theta[p+1L] else coefficient_limit
+    g = c(g,coefficient$value[upper]-coefficient$upper[upper]-allowance,
+      coefficient$lower[lower]-coefficient$value[lower]-allowance)
+    jacobian = rbind(jacobian,coefficient$gradient[upper,,drop=FALSE],
+      -coefficient$gradient[lower,,drop=FALSE])
   }
   if (tier==2L) {
-    jacobian = cbind(jacobian, c(rep(0,2*length(target)),rep(-tol*coefficient_scale/problem$coefficient_units,2)))
+    jacobian = cbind(jacobian, c(rep(0,2*length(target)),
+      rep(-coefficient_scale,length(upper)+length(lower))))
     g = c(g,-theta[p+1L])
     jacobian = rbind(jacobian,c(rep(0,p),-1))
     return(list(value=theta[p+1L],gradient=c(rep(0,p),1),g=g,jacobian=jacobian))
@@ -187,7 +232,16 @@ prior_joint_solve = function(start, problem, tier=3L, coefficient_limit=0, coeff
   # optimizer's absolute stopping rule is insufficient for belief tolerances.
   for (polish in seq_len(20L)) {
     current = prior_joint_system(start,problem,tier,coefficient_limit,coefficient_scale)
-    active = which(current$g > 0)
+    # Outcome acceptance can be far tighter than generic optimizer accuracy.
+    # Do not let roundoff-size coefficient-bound errors repeatedly undo an
+    # outcome correction. This is numerical allowance, not a belief weight;
+    # zero coefficient sacrifice is still checked against raw tolerances.
+    allowance = rep(0,length(current$g))
+    if ((tier==2L && tail(start,1)>1e-8) || (tier==3L && coefficient_limit>0)) {
+      coefficient_rows = seq_along(current$g)>2*length(problem$outcome)
+      allowance[coefficient_rows] = 1e-10
+    }
+    active = which(current$g > allowance)
     if (!length(active)) break
     J = current$jacobian[active,,drop=FALSE]
     singular = svd(J)
@@ -272,7 +326,14 @@ prior_joint_conflict = function(problem) {
   A = problem$X[vapply(location,`[[`,integer(1),"configuration"),,drop=FALSE]
   b = vapply(location,`[[`,numeric(1),"target")
   tol = vapply(location,`[[`,numeric(1),"tolerance")
-  projected = prior_joint_projection(A,b,problem$mean,problem$sd)
+  # Test the certificate in dimensionless coordinates as well: neither raw
+  # predictor units nor the outcome currency should change a conflict label.
+  scaled = sweep(A,2,problem$sd,"*")
+  units = sqrt(rowSums(scaled^2))
+  b = (b-as.vector(A%*%problem$mean))/units
+  A = scaled/units
+  tol = tol/units
+  projected = prior_joint_projection(A,b,rep(0,ncol(A)),rep(1,ncol(A)))
   residual = b-as.vector(A%*%projected)
   # A left-null-space certificate proves that the tolerance boxes cannot meet.
   if (max(abs(crossprod(A,residual))) < 1e-8*max(1,sum(abs(A)*max(abs(residual)))) &&
@@ -287,8 +348,19 @@ prior_joint_details = function(problem,theta,coefficient=FALSE) {
   target = vapply(records,`[[`,numeric(1),"target")
   tolerance = vapply(records,`[[`,numeric(1),"tolerance")
   residual = (values-target)/tolerance
-  data.frame(id=vapply(records,`[[`,numeric(1),"id"),target=target,achieved=values,
-    tolerance=tolerance,residual=residual,satisfied=is.finite(residual) & abs(residual)<=1)
+  discrepancy = values-target
+  # Converted standardized constraints retain the researcher's entered units.
+  factors = vapply(records,function(r) if (coefficient && r$type!="probability" &&
+    !is.null(r$standardization_factor)) r$standardization_factor else 1,numeric(1))
+  details = data.frame(id=vapply(records,`[[`,numeric(1),"id"),target=target/factors,
+    achieved=values/factors,discrepancy=discrepancy/factors,tolerance=tolerance/factors,
+    residual=residual,satisfied=is.finite(residual) & abs(residual)<=1)
+  if (!coefficient) return(details)
+  metric = prior_joint_coefficient_metric(theta,problem)
+  details$metric = vapply(records,function(r) if (r$type=="probability") "probit" else "baseline SD",character(1))
+  details$normalized_discrepancy = metric$value
+  details$normalized_violation = metric$violation
+  details
 }
 
 prior_joint_reconcile = function(object) {
@@ -326,13 +398,14 @@ prior_joint_reconcile = function(object) {
   theta = initial$par
   outcome = prior_joint_details(problem,theta)
   if (all(outcome$satisfied) && length(problem$coefficient)) {
-    coefficient = prior_joint_details(problem,theta,TRUE)
-    scale = max(1,pmax(abs(coefficient$residual)-1,0))
+    scale = max(1,prior_joint_coefficient_metric(theta,problem)$violation)
     second = prior_joint_solve(c(theta,1),problem,tier=2L,coefficient_scale=scale)
     theta2 = head(second$par,length(base))
-    details = prior_joint_details(problem,theta2,TRUE)
-    limit = max(c(0,abs(details$residual)-1))
-    third = prior_joint_solve(theta2,problem,tier=3L,coefficient_limit=limit*(1+1e-8))
+    limit = max(c(0,prior_joint_coefficient_metric(theta2,problem)$violation))
+    # A relative numerical allowance opens the nearly optimal minimax face
+    # for KL optimization. Zero sacrifice stays exactly zero.
+    third = prior_joint_solve(theta2,problem,tier=3L,coefficient_limit=limit*(1+1e-6))
+    joint$coefficient_limit = limit
     stages = c(stages,list(coefficient=second,KL=third))
     theta = third$par
   }
@@ -345,13 +418,22 @@ prior_joint_reconcile = function(object) {
   joint$underdetermined = qr(prior_joint_values(theta,problem)$gradient/problem$units)$rank < length(theta)
   verified = all(joint$outcome$satisfied) && all(vapply(stages,function(s) s$convergence==0 && is.finite(s$objective) &&
     s$violation<1e-8 && is.finite(s$stationarity) && s$stationarity<1e-4,logical(1)))
+  if (!is.null(joint$coefficient_limit)) {
+    achieved = max(c(0,joint$coefficient$normalized_violation))
+    bound = joint$coefficient_limit*(1+1e-6)
+    tier_order = achieved <= bound+1e-10 &&
+      (bound>0 || all(joint$coefficient$satisfied)) &&
+      joint$kl <= prior_joint_kl(theta2,problem)$value+1e-8*max(1,prior_joint_kl(theta2,problem)$value)
+    verified = verified && tier_order
+  }
+  parameters = prior_joint_parameters(theta,problem)
+  verified = verified && all(is.finite(c(parameters$mean,parameters$sd))) && all(parameters$sd>0)
   if (!verified) {
     joint$message = "No converged feasible joint prior was verified. Outcome beliefs may conflict, or numerical reconciliation failed; revise the beliefs or tolerances."
     object$joint = joint
     warning(joint$message,call.=FALSE)
     return(object)
   }
-  parameters = prior_joint_parameters(theta,problem)
   for (i in seq_along(problem$mean)) object$selected[[names(problem$mean)[i]]] =
     list(distribution="normal",mean=unname(parameters$mean[i]),sd=unname(parameters$sd[i]))
   joint$adjusted = object$selected
@@ -409,6 +491,9 @@ prior_joint_summary = function(x) {
     }
   }
   cat("\nCoefficient reconciliation (centered-intercept parameterization):\n")
+  cat("Discrepancy/tolerance: entered units; residual: discrepancy / numerical tolerance.\n")
+  cat("Comparison metric: baseline-SD distances for locations/SDs, probit distances for probabilities.\n")
+  cat("Normalized violation: distance outside the tolerance band; zero does not override the raw satisfaction check.\n")
   for (name in names(joint$problem$mean)) {
     before = joint$baseline[[name]]; after = object$selected[[name]]
     cat(name,":",prior_format(before),"->",prior_format(after),"\n")
@@ -421,6 +506,7 @@ prior_joint_summary = function(x) {
       if (nrow(row)) print(row,row.names=FALSE,digits=8)
     }
   }
+  if (!is.null(joint$coefficient_limit)) cat("\nTier-2 maximum dimensionless violation:",joint$coefficient_limit,"\n")
   if (!is.null(joint$kl)) cat("\nKL(adjusted || baseline):",joint$kl,"\n")
   cat("Reference anchoring: coefficient-only selections, with backend defaults where not elicited.\n")
   cat("Underdetermined constraints use the stated minimax/KL criterion; numerical search does not certify a unique global optimum.\n")

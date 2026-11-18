@@ -30,13 +30,22 @@ is retained; independence refers to that parameterization.
 
 Reconciliation has three priorities: satisfy outcome beliefs within their
 tolerances; minimize the largest coefficient-belief violation beyond its
-tolerance; then minimize KL(adjusted prior || baseline prior). Defaults enter
+tolerance in dimensionless coordinates; then minimize
+KL(adjusted prior || baseline prior). Locations and SDs use baseline-SD
+units; probabilities use probit (standard-Normal quantile) distances outside
+their original probability tolerance bands. Numerical tolerances determine
+satisfaction, not the relative importance of beliefs. Defaults enter
 only the last tier. This is a deterministic constrained numerical search,
 not a guarantee of global optimality. An unverified solution is never exported.
 Original coefficient-only selections define the baseline on every update,
 preventing successive outcome additions from moving the baseline.
 
 The fixed-variance Mahalanobis projection initializes the numerical search.
+Positive affine changes of simple numeric predictor units preserve the
+centered independent-Normal structure. Equivalent targets, thresholds and
+absolute tolerances give equivalent reconciliations up to numerical accuracy.
+This does not extend to transformations mixing coefficient columns and
+inducing covariance. Outcome unit changes must transform tolerances too.
 General reconciliation may change both means and SDs. Underidentified problems
 are resolved by the stated preference criterion, not by claiming identification.
 Relaxed coefficient beliefs produce a warning and remain visible in

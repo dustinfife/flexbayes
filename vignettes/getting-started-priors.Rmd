@@ -296,6 +296,11 @@ priors, rather than successively replacing them.
 The priorities are explicit: satisfy outcome beliefs within their stated
 tolerances, preserve explicitly elicited coefficient beliefs as closely as
 possible, and then minimize departure from the baseline joint prior.
+The comparison uses each coefficient's uncertainty, not its raw units, so
+switching from square feet to thousands of square feet doesn't change which
+beliefs matter most. Probability beliefs are compared in standard-Normal
+quantile units, so small tail probabilities keep their meaning. Numerical
+tolerances still decide whether each original statement holds.
 Backend defaults supply an anchor, not additional explicit beliefs. If a
 coefficient belief has to be relaxed, a warning says so. Its original
 statement is retained, and `summary(reconciled, diagnostics = TRUE)` shows

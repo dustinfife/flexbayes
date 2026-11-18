@@ -1,9 +1,3 @@
-joint_example = function(formula = y ~ x + z) {
-  skip_if_not_installed("rstanarm")
-  if (as.character(packageVersion("rstanarm")) != "2.32.2") skip("Verified backend version required")
-  identify_priors(formula, data.frame(x=1:6,z=rep(0:1,3),y=c(2,4,3,7,6,10)))
-}
-
 joint_moments = function(p, at) {
   # Independent model-matrix construction and backend centering.
   X = model.matrix(delete.response(terms(p$model$formula)), as.data.frame(at))

@@ -41,9 +41,11 @@ is added to these calculations.
 ## Three priorities, without preference weights
 
 1. All outcome beliefs must hold within their absolute `belief()` tolerances.
-2. Among feasible priors, minimize the maximum excess violation of explicit
-   coefficient beliefs: $\max_i\max(0, |a_i-t_i|/\tau_i-1)$, where $a_i$ is
-   the achieved quantity, $t_i$ its target, and $\tau_i$ its tolerance.
+2. Among feasible priors, minimize the maximum **dimensionless** excess
+   violation of explicit coefficient beliefs. Acceptance tolerances determine
+   whether a statement holds; they are not preference weights. The former
+   objective, $\max_i\max(0, |a_i-t_i|/\tau_i-1)$, made the common default
+   absolute tolerance impose different preferences when units changed.
 3. Among those solutions, minimize
 
 $$
@@ -58,6 +60,77 @@ backend defaults enter only priority 3. No arbitrary weighting of explicit
 beliefs against defaults is used. A parameter with zero contribution at all
 specified configurations stays at its baseline unless another explicit
 constraint requires otherwise.
+
+### Comparing compromises
+
+For a mean, mode or SD belief about coefficient $j$, define
+
+$$
+d_i = (a_i-t_i)/s_{0j},\qquad
+L_i=-\tau_i/s_{0j},\quad U_i=\tau_i/s_{0j}.
+$$
+
+The discrepancy and its tolerance band are measured using baseline coefficient
+uncertainty, rather than dollars, dollars per square foot, or tolerance counts.
+SD discrepancies are scaled as positive quantities, without a location shift.
+
+For a probability statement $P(\beta_j<h)=p_i$, let
+$q_i=(h-\mu_j)/s_j$ and $z_i=\Phi^{-1}(p_i)$. For an upper-tail statement use
+$q_i=(\mu_j-h)/s_j$. In both cases the achieved probability is $\Phi(q_i)$.
+Define
+
+$$
+d_i=q_i-z_i,\quad
+L_i=\Phi^{-1}(\max(0,p_i-\tau_i))-z_i,\quad
+U_i=\Phi^{-1}(\min(1,p_i+\tau_i))-z_i.
+$$
+
+This compares the threshold's achieved and requested positions in a standard
+Normal distribution. It respects the meaning of small tail probabilities,
+rather than equating a fixed probability-point error in every part of the CDF.
+The calculation uses $q_i$ directly; it does not invert a rounded CDF value.
+An endpoint of 0 or 1 removes that side of the constraint through an infinite
+probit bound, without clipping achieved values or replacing the probability target.
+
+For either kind of belief, priority 2 minimizes
+
+$$
+T=\max_i v_i,\qquad v_i=\max(0,L_i-d_i,d_i-U_i).
+$$
+
+Thus a belief within its original acceptance band has zero excess sacrifice.
+This is an explicitly chosen Normal-coordinate metric, not a universal distance
+between all possible kinds of beliefs. It supplies a common, dimensionless
+comparison without coefficient-specific preference weights. Means and spreads
+remain free to change together. Raw discrepancies, absolute tolerances and
+satisfaction flags are retained separately; the comparison metric never relabels
+a relaxed belief as satisfied. Standardized coefficient beliefs display raw
+quantities in their entered units, while optimization uses their equivalent
+original-scale constraints.
+
+### Scope of unit invariance
+
+For simple predictors, $x'_j=a_jx_j+b_j$ with $a_j>0$ implies
+$\beta'_j=\beta_j/a_j$. Since
+$x'_j-\bar x'_j=a_j(x_j-\bar x_j)$, the centered intercept and independence
+are preserved. Baseline and adjusted slope SDs transform by $1/a_j$ as well.
+The optimization variables, dimensionless sacrifice and KL divergence are
+unchanged. Positive affine response changes also preserve this structure when
+intercept locations and outcome statements receive the corresponding shift.
+
+Equivalent specifications must transform *absolute location/SD tolerances*,
+not just targets and probability thresholds. Probability tolerances are unchanged.
+The default `1e-6` remains an absolute numerical acceptance tolerance for backward
+compatibility. Leaving it unchanged after rescaling describes slightly different
+acceptance bands; very small differences may therefore remain. It no longer
+assigns arbitrary cross-coefficient importance to those units.
+
+The claim covers rescalings of centered model-matrix columns that preserve the
+supported independent-Normal joint prior. General changes of centering, rotations,
+or affine transformations inside polynomial/interaction formulas can mix
+coefficients and induce covariance. Such changes need correlated priors to be
+equivalent; unrestricted parameterization invariance is not claimed. Extreme
+scales whose tolerances cannot be represented reliably may remain unresolved.
 
 Adding another outcome specification recomputes from the same coefficient-only
 baseline. Updating coefficient beliefs rebuilds that baseline and reconciles
@@ -87,19 +160,28 @@ The implementation uses deterministic augmented-Lagrangian optimization,
 BFGS, analytic gradients, and a log-SD parameterization. A dimensionless
 maximum-violation variable implements priority 2. Constraints are scaled by
 baseline SDs (probabilities use unit scale); this is numerical conditioning,
-not a preference weight. The priority-2 optimum is retained to relative
-numerical accuracy before KL minimization. A small interior tolerance margin
+not a preference weight. Coefficient constraints use the dimensionless bands
+above. A nonzero priority-2 optimum is retained to relative accuracy `1e-6`
+before KL minimization (zero remains zero). This small numerical allowance
+opens a nearly optimal face for the KL search; it is not a statistical weight.
+The final score is checked against this bound, and KL must not materially exceed
+its value at the priority-2 solution. A small interior tolerance margin
 reduces rounding problems; an outcome-feasibility retry removes that margin
 when tolerance intervals have a narrow intersection. A final Jacobian-based
-correction restores numerical feasibility. Actual, unscaled belief residuals
+correction restores numerical feasibility. Outcome feasibility is checked in
+actual belief units; roundoff-size coefficient-bound errors (up to `1e-10` in
+comparison units) cannot repeatedly undo that correction. A zero-sacrifice result
+must still satisfy every raw coefficient tolerance. Conflict certificates are
+also evaluated in dimensionless coordinates. Actual, unscaled belief residuals
 are always recomputed before accepting a result.
 
 The routine consumes no random numbers. It is a deterministic local search,
 not a proof of a global optimum or uniqueness. A single outcome belief cannot
 identify every coefficient mean and variance. The minimax/KL criterion chooses
 an anchored solution to underdetermined specifications. Diagnostics include
-targets, achieved quantities, residuals in tolerance units, optimizer codes,
-iteration counts, scaled constraint violations, objective values, and local
+targets, achieved quantities, raw discrepancies, numerical tolerances,
+residuals in tolerance units, dimensionless discrepancies and excess violations,
+optimizer codes, iteration counts, scaled constraint violations, objective values, and local
 stationarity residuals. A nonnegative multiplier certificate checks first-order
 optimality; a feasible result without a sufficiently small certificate residual
 is not accepted. This local check does not certify a global optimum.
