@@ -474,13 +474,12 @@ prior_joint_validate = function(object) {
   invisible(object)
 }
 
-prior_joint_summary = function(x) {
+prior_joint_diagnostics = function(x, verified=TRUE) {
   object = x$object; joint = object$joint
+  cat("\nTechnical diagnostics (",joint$status,")\n",sep="")
+  if (!verified) prior_console_line("Unverified reconciliation: these diagnostics do not establish selected candidate priors.")
   print(object)
-  cat("\nOutcome reconciliation:",joint$status,"\n")
-  cat("Beliefs concern conditional expected outcomes, without residual noise.\n")
   if (!is.null(joint$message)) prior_console_line(joint$message)
-  if (!x$diagnostics) return(invisible(x))
   index = 0L
   for (specification in object$outcomes) {
     cat("\nAt:",if (length(specification$at)) paste(names(specification$at),unlist(specification$at),sep="=",collapse=", ") else "intercept only","\n")
@@ -513,5 +512,147 @@ prior_joint_summary = function(x) {
   if (length(joint$stages)) print(do.call(rbind,lapply(joint$stages,function(s) data.frame(
     convergence=s$convergence,iterations=s$iterations,scaled_violation=s$violation,
     stationarity=s$stationarity,objective=s$objective))))
+  invisible(x)
+}
+
+prior_joint_summary_number = function(value, probability=FALSE, mark=",") {
+  if (length(value)!=1L || !is.finite(value)) return("Not available")
+  if (probability) value = 100*value
+  scientific = abs(value)>1e12 || (value!=0 && abs(value)<1e-4)
+  result = format(signif(value,if (probability) 4 else 6),trim=TRUE,big.mark=mark,scientific=scientific)
+  paste0(result,if (probability) "%" else "")
+}
+
+prior_joint_summary_belief = function(record, outcome="value") {
+  if (record$type=="probability") {
+    threshold = if (is.null(record$entered)) record$threshold else record$entered$threshold
+    label = paste0("P(",outcome," ",record$operator," ",prior_joint_summary_number(threshold),")")
+  } else label = switch(record$type,mode=paste("Most likely",outcome),
+    mean=paste("Mean",outcome),sd=paste("SD of",outcome),record$label)
+  if (identical(record$scale,"standardized")) label = paste0(label," [standardized]")
+  label
+}
+
+prior_joint_summary_distribution = function(prior) {
+  if (is.null(prior)) return("Not selected")
+  if (prior$distribution!="normal") return(prior_format(prior))
+  paste0("N(",prior_joint_summary_number(prior$mean,mark=""),",",
+    prior_joint_summary_number(prior$sd,mark=""),")")
+}
+
+prior_joint_summary_outcomes = function(object, ready) {
+  outcome = paste(deparse(object$model$formula[[2]]),collapse=" ")
+  cat("\nOutcome:",outcome,"\n")
+  index = 0L
+  for (specification in object$outcomes) {
+    at = if (length(specification$at)) paste(names(specification$at),
+      vapply(specification$at,prior_joint_summary_number,character(1)),sep=" = ",collapse=", ") else "intercept only"
+    prior_console_line(paste("At:",at))
+    rows = list()
+    for (record in specification$beliefs) {
+      index = index+1L
+      achieved = if (ready) prior_joint_summary_number(object$joint$outcome$achieved[index],
+        probability=record$type=="probability") else "Not verified"
+      rows[[length(rows)+1L]] = data.frame(
+        Belief=prior_joint_summary_belief(record,paste("expected",outcome)),
+        Requested=prior_joint_summary_number(record$target,probability=record$type=="probability"),
+        Achieved=achieved)
+    }
+    cat("\nOutcome beliefs\n")
+    print(do.call(rbind,rows),row.names=FALSE,right=FALSE)
+    cat("\n")
+  }
+  satisfied = if (ready) "Yes" else if (object$joint$status=="incompatible") "No (conflicting beliefs)" else "Not verified"
+  cat("Outcome beliefs satisfied:",satisfied,"\n")
+}
+
+# Build one display group per changed coefficient, followed only by beliefs
+# whose recorded satisfaction checks failed. No belief evaluation is repeated.
+prior_joint_summary_comparison = function(object) {
+  joint = object$joint
+  parameters = names(joint$problem$mean)
+  changed = parameters[!vapply(parameters,function(name)
+    identical(object$selected[[name]],joint$baseline[[name]]),logical(1))]
+  rows = list()
+  for (parameter in changed) {
+    if (length(rows)) rows[[length(rows)+1L]] = c("","","")
+    rows[[length(rows)+1L]] = c(parameter,"","")
+    rows[[length(rows)+1L]] = c("  Prior",prior_joint_summary_distribution(joint$baseline[[parameter]]),
+      prior_joint_summary_distribution(object$selected[[parameter]]))
+    for (record in object$beliefs[[parameter]]) {
+      achieved = joint$coefficient[joint$coefficient$id==record$id,,drop=FALSE]
+      if (!nrow(achieved) || achieved$satisfied) next
+      rows[[length(rows)+1L]] = c(paste0("  ",prior_joint_summary_belief(record)),
+        prior_joint_summary_number(achieved$target,probability=record$type=="probability"),
+        prior_joint_summary_number(achieved$achieved,probability=record$type=="probability"))
+    }
+  }
+  if (!length(rows)) return(NULL)
+  result = as.data.frame(do.call(rbind,rows),stringsAsFactors=FALSE)
+  names(result) = c("Parameter / Belief","Before","After")
+  result
+}
+
+# Wrap cells, including unusually long parameter names, without truncating data.
+prior_joint_summary_cell = function(text, width) {
+  if (!nzchar(text) || nchar(text)<=width) return(text)
+  prefix = if (startsWith(text,"  ")) "  " else ""
+  width = max(1,width-nchar(prefix))
+  words = strwrap(trimws(text),width=width)
+  if (!length(words)) return("")
+  parts = lapply(words,function(word) {
+    starts = seq.int(1,nchar(word),by=width)
+    substring(word,starts,pmin(nchar(word),starts+width-1))
+  })
+  paste0(prefix,unlist(parts,use.names=FALSE))
+}
+
+prior_joint_summary_row = function(row, widths) {
+  if (all(!nzchar(unlist(row)))) { cat("\n"); return(invisible(NULL)) }
+  cells = Map(prior_joint_summary_cell,row,widths)
+  for (i in seq_len(max(lengths(cells)))) {
+    line = vapply(cells,function(cell) if (length(cell)>=i) cell[i] else "",character(1))
+    line = paste(sprintf(paste0("%-",widths,"s"),line),collapse="  ")
+    cat(sub(" +$","",line),"\n",sep="")
+  }
+}
+
+prior_joint_summary_coefficients = function(object, ready) {
+  cat("\nCoefficient priors and beliefs\n")
+  if (!ready) {
+    cat("No verified reconciliation to report.\n")
+    return(invisible(NULL))
+  }
+  rows = prior_joint_summary_comparison(object)
+  if (is.null(rows)) { cat("No coefficient priors changed.\n"); return(invisible(NULL)) }
+  widths = pmax(nchar(names(rows)),vapply(rows,function(column) max(nchar(column)),integer(1)))
+  console = max(40L,getOption("width",80L))
+  widths[1] = min(widths[1],max(12,console-sum(widths[-1])-4))
+  if (sum(widths)+4>console) {
+    widths[2] = min(widths[2],floor((console-widths[1]-4)/2))
+    widths[3] = min(widths[3],console-widths[1]-widths[2]-4)
+  }
+  prior_joint_summary_row(as.list(names(rows)),widths)
+  cat(strrep("-",sum(widths)+4),"\n",sep="")
+  for (i in seq_len(nrow(rows))) prior_joint_summary_row(as.list(rows[i,]),widths)
+  cat("Other priors unchanged.\n")
+}
+
+prior_joint_summary = function(x) {
+  object = x$object
+  error = tryCatch({ prior_predictive_validate(object); NULL },error=conditionMessage)
+  ready = is.null(error)
+  status = if (ready) "Successful" else switch(object$joint$status,
+    incompatible="Incompatible",unresolved="Not resolved","Needs review")
+  cat("Prior reconciliation:",status,"\n")
+  prior_joint_summary_outcomes(object,ready)
+  prior_joint_summary_coefficients(object,ready)
+  if (!ready) {
+    reason = if (object$joint$status %in% c("incompatible","unresolved"))
+      "Revise the outcome beliefs or inspect diagnostics before using these priors." else error
+    prior_console_line(paste("Not ready to use:",reason))
+  }
+  if (x$diagnostics) prior_joint_diagnostics(x,ready) else
+    prior_console_line("For mathematical details: summary(priors, diagnostics = TRUE).")
   invisible(x)
 }

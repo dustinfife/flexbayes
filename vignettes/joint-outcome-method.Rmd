@@ -202,8 +202,15 @@ no silent approximation is attempted.
 
 ## Checking and backend fidelity
 
-`summary(priors, diagnostics=TRUE)` reports each configuration, achieved outcome
-beliefs, baseline and adjusted coefficients, and explicit belief relaxations.
+`summary(priors)` reports each configuration, requested and achieved outcome
+beliefs and one grouped table of changed coefficient priors and compromised
+original beliefs. Before shows the original prior or requested belief value;
+After shows the adjusted prior or achieved value. The table uses `N(mean,SD)`,
+omits unchanged priors and satisfied beliefs, and contains no optimization
+statistics. Unverified results are flagged rather than presented as selected.
+`summary(priors, diagnostics=TRUE)` retains the complete before/after comparison
+and adds raw and normalized discrepancies, numerical tolerances, KL divergence,
+convergence and stationarity details.
 `check_prior()` samples the adjusted coefficients using the unchanged prior
 predictive machinery; `expected` excludes residual noise and `simulated`
 includes it. `as_rstanarm()` exports adjusted Normal locations and scales with

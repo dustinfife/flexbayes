@@ -71,7 +71,7 @@ scores.
 One detail deserves a pause: the intercept is **centered**. It describes
 the expected score at 5 study hours and 1 practice session, the training
 model-matrix column means, rather than at zero study hours.
-`summary(priors)` shows these reference values.
+`summary(priors, diagnostics = TRUE)` shows these reference values.
 
 There's a qualification: Gaussian backend defaults use observed outcome
 summaries and predictor scales. They are data-dependent references,
@@ -282,7 +282,7 @@ reconciled = house_priors + update_outcome(
   belief(mode = 450000),
   belief(value < 350000, probability = .05)
 )
-print(reconciled)
+summary(reconciled)
 ```
 
 These beliefs describe the **expected price** for that house. They do not
@@ -303,9 +303,12 @@ quantile units, so small tail probabilities keep their meaning. Numerical
 tolerances still decide whether each original statement holds.
 Backend defaults supply an anchor, not additional explicit beliefs. If a
 coefficient belief has to be relaxed, a warning says so. Its original
-statement is retained, and `summary(reconciled, diagnostics = TRUE)` shows
-its target, achieved value, and whether it still holds. Incompatible or
-numerically unresolved outcome specifications cannot be exported or fitted.
+statement is retained. `summary(reconciled)` compares requested and achieved
+outcomes, then groups each changed coefficient prior with the beliefs it
+compromised. Unchanged priors and satisfied beliefs stay out of the table.
+Add `diagnostics = TRUE` for the complete comparison and mathematical
+details. Incompatible or numerically unresolved outcome specifications
+cannot be exported or fitted.
 
 Now inspect the implications, rather than treating optimization as evidence
 that the priors are substantively sensible:

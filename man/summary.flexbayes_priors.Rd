@@ -20,7 +20,12 @@ beliefs, KL direction, and numerical convergence diagnostics.}
 A summary.flexbayes_priors object, displayed by its print method.
 }
 \description{
-Displays a compact prior table, original beliefs, relevant warnings and
-centered-intercept reference values. Joint outcome diagnostics distinguish
-satisfied and relaxed beliefs without replacing the original statements.
+Displays a compact prior table, original beliefs and relevant warnings. With
+outcome beliefs, shows outcome satisfaction and one grouped comparison of
+changed coefficient priors and their compromised beliefs. Before means the
+original distribution or requested belief value; After means the adjusted
+distribution or achieved value. Normal is abbreviated to N only in this table.
+Unchanged priors and satisfied beliefs are omitted from the comparison.
+Unverified reconciliations are clearly flagged. Complete comparisons,
+backend-centering references and optimization statistics require diagnostics=TRUE.
 }

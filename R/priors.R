@@ -81,9 +81,14 @@ print.flexbayes_priors = function(x, ...) {
 
 #' Summarize prior specifications
 #'
-#' Displays a compact prior table, original beliefs, relevant warnings and
-#' centered-intercept reference values. Joint outcome diagnostics distinguish
-#' satisfied and relaxed beliefs without replacing the original statements.
+#' Displays a compact prior table, original beliefs and relevant warnings. With
+#' outcome beliefs, shows outcome satisfaction and one grouped comparison of
+#' changed coefficient priors and their compromised beliefs. Before means the
+#' original distribution or requested belief value; After means the adjusted
+#' distribution or achieved value. Normal is abbreviated to N only in this table.
+#' Unchanged priors and satisfied beliefs are omitted from the comparison.
+#' Unverified reconciliations are clearly flagged. Complete comparisons,
+#' backend-centering references and optimization statistics require diagnostics=TRUE.
 #' @param object A prior specification.
 #' @param diagnostics Include constraint targets, achieved values, standardized
 #'   residuals, and candidate fit scores. Outcome reconciliation additionally
@@ -151,13 +156,15 @@ print.summary.flexbayes_priors = function(x, ...) {
       } else prior_console_line("Constraint diagnostics unavailable: candidate rejected before evaluation.")
     }
   }
-  cat("\n")
-  prior_console_line(prior_default_description(object))
-  if ("(Intercept)" %in% names(object$selected)) {
-    prior_console_line("Centered intercept reference: model-matrix column means (including contrast and interaction columns).")
-    reference = object$model$reference
-    if (length(reference)) print(data.frame(Column = names(reference), Reference = unname(reference)), row.names = FALSE, digits = 4) else cat("Intercept-only model; no predictor columns.\n")
-  } else cat("No intercept; predictors are not centered.\n")
+  if (diagnostics) {
+    cat("\n")
+    prior_console_line(prior_default_description(object))
+    if ("(Intercept)" %in% names(object$selected)) {
+      prior_console_line("Centered intercept reference: model-matrix column means (including contrast and interaction columns).")
+      reference = object$model$reference
+      if (length(reference)) print(data.frame(Column = names(reference), Reference = unname(reference)), row.names = FALSE, digits = 4) else cat("Intercept-only model; no predictor columns.\n")
+    } else cat("No intercept; predictors are not centered.\n")
+  }
   invisible(x)
 }
 
