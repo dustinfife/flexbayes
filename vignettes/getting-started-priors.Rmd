@@ -23,9 +23,11 @@ scores. Earlier research may already suggest that another hour helps,
 though probably not by 40 points.
 
 Those expectations can become a **prior**: what we believe about a model
-parameter before using outcome evidence to estimate it. With
-**flexbayes**, we state beliefs, fit candidate distributions to them,
-and examine their implications before fitting the model.
+parameter before using outcome evidence to estimate it. When using
+**flexbayes**, we would state these beliefs in a convenient way, then
+the computer finds the right distribution to fit, then beliefs, fit
+candidate distributions to them, and examine their implications before
+fitting the model.
 
 We'll use a Gaussian regression of test score (`y`) on study hours (`x`)
 and additional practice sessions (`z`). These data are simulated so you
@@ -86,7 +88,7 @@ plausibly adds 3 score points, holding practice sessions constant. We
 can say that directly:
 
 ```{r first-belief}
-priors = update(priors, parameter = "x", belief(mode = 3))
+priors = priors + update_priors("x", belief(mode = 3))
 print(priors)
 ```
 
@@ -99,16 +101,17 @@ Let's add something about the uncertainty. Suppose we'd give a 95%
 probability to the study-hour slope being below 6 points:
 
 ```{r second-belief}
-priors = update(
-  priors, parameter = "x",
+priors = priors + update_priors(
+  "x",
   belief(value < 6, probability = .95)
 )
 ```
 
 `value` stands for the coefficient. We're expressing uncertainty about
 the study-hour slope; we aren't saying that 95% of students gain fewer
-than 6 points. The earlier mode belief is still there. `update()` adds
-beliefs unless we tell it to remove them.
+than 6 points. The earlier mode belief is still there. `update_priors()`
+describes the beliefs; `+` applies them while keeping existing beliefs.
+It returns a revised object, so we assign the result back to `priors`.
 
 ## Examine the selected prior
 
@@ -124,12 +127,11 @@ values. Candidates must satisfy every tolerance. The package ranks
 acceptable candidates and selects one the backend can represent.
 
 Use `plot(priors)` to see the selected distributions for all parameters.
-Here, `parameter = "x"` compares acceptable candidates for the study-hour
-slope and marks the selected one. It's a regular ggplot object; you can
-add `ggplot2::theme_bw()`.
-The other parameters still have their backend defaults. We'll need to
-think about those too: one reassuring density can't tell us what the
-whole model will predict.
+Here, `parameter = "x"` compares acceptable candidates for the
+study-hour slope and marks the selected one. It's a regular ggplot
+object; you can add `ggplot2::theme_bw()`. The other parameters still
+have their backend defaults. We'll need to think about those too: one
+reassuring density can't tell us what the whole model will predict.
 
 ## What if the beliefs do not fit?
 
@@ -137,8 +139,8 @@ It's easy to write two statements that sound reasonable separately.
 Let's see what happens when we add these:
 
 ```{r contradictory}
-priors = update(
-  priors, parameter = "x",
+priors = priors + update_priors(
+  "x",
   belief(value < 0, probability = .95),
   belief(value > 1, probability = .95)
 )
@@ -160,8 +162,9 @@ print(priors)
 ```
 
 The removal numbers are the **current displayed numbers within that
-parameter**. We can also remove beliefs and add replacements in the same
-update.
+parameter**. Use `update()` when removing beliefs; it can also add
+replacements in the same call. The earlier `update()` syntax for adding
+beliefs still works.
 
 These failures can look similar on screen, but need different responses:
 
@@ -196,20 +199,21 @@ plot(check, type = "interval")
 ```
 
 The earlier `plot(priors)` showed parameter distributions.
-`plot(check, type = "outcome")` shows the scores those priors make plausible;
-this is the default for `plot(check)`. Here we asked for interval panels
-so we can compare the two kinds of uncertainty.
-Use `plot(check, type = "model")` to see the median expected relationship and
-a central 90% prior interval, based on all the stored draws. This band describes
-uncertainty about expected scores, not differences between individual students.
-Add `display = "draws"` to see individual relationships, or `display = "both"`
-to show them alongside the band. The `draws` argument limits the individual
-curves, not the draws used for the interval.
+`plot(check, type = "outcome")` shows the scores those priors make
+plausible; this is the default for `plot(check)`. Here we asked for
+interval panels so we can compare the two kinds of uncertainty. Use
+`plot(check, type = "model")` to see the median expected relationship
+and a central 90% prior interval, based on all the stored draws. This
+band describes uncertainty about expected scores, not differences
+between individual students. Add `display = "draws"` to see individual
+relationships, or `display = "both"` to show them alongside the band.
+The `draws` argument limits the individual curves, not the draws used
+for the interval.
 
 The **Expected outcome** panel shows uncertainty about conditional mean
-scores. The **Predicted outcome** panel adds residual variation.
-Even if we knew the expected score precisely, individual students could
-still differ.
+scores. The **Predicted outcome** panel adds residual variation. Even if
+we knew the expected score precisely, individual students could still
+differ.
 
 Both panels show medians and central 90% intervals. Rows 1--5 mean 0,
 2.5, 5, 7.5, and 10 study hours, each with 2 practice sessions. The axis
@@ -225,17 +229,17 @@ limits.
 
 We need a substantive reason to revise. Suppose earlier studies suggest
 an expected score near 65 at the centering reference and a
-practice-session effect near 2 points. We can add that knowledge:
+practice-session effect near 2 points. We can add beliefs for both
+parameters in one chain:
 
 ```{r revise-predictive}
-revised = update(
-  priors, parameter = "(Intercept)",
-  belief(mean = 65), belief(sd = 8)
-)
-revised = update(
-  revised, parameter = "z",
-  belief(mean = 2), belief(sd = 1)
-)
+revised = priors +
+  update_priors(
+    "(Intercept)", belief(mean = 65), belief(sd = 8)
+  ) +
+  update_priors(
+    "z", belief(mean = 2), belief(sd = 1)
+  )
 set.seed(52)
 revised_check = check_prior(revised, n = 500, newdata = prediction_cases)
 plot(revised_check, type = "interval")
@@ -253,18 +257,19 @@ imitate the outcomes already in front of us.
 
 ## What if you know more about the outcome?
 
-Sometimes a house price is easier to think about than a price coefficient.
-You might know what a particular house ought to cost, without knowing how
-much of its price comes from floor area, age, or bedroom count.
+Sometimes a house price is easier to think about than a price
+coefficient. You might know what a particular house ought to cost,
+without knowing how much of its price comes from floor area, age, or
+bedroom count.
 
-Suppose your original priors imply an expected price of $400,000 for a
-particular house, but you believe $350,000 is more plausible. Several
-coefficients could contribute to that $50,000 discrepancy. Assigning it all
-to the intercept would be arbitrary. Instead, flexbayes looks for a small
-collective change, measured relative to each coefficient's original
-uncertainty. A tightly concentrated prior generally resists change more
-than a diffuse one. Parameters do not move by equal amounts in their raw
-units.
+Suppose your original priors imply an expected price of \$400,000 for a
+particular house, but you believe \$350,000 is more plausible. Several
+coefficients could contribute to that \$50,000 discrepancy. Assigning it
+all to the intercept would be arbitrary. Instead, flexbayes looks for a
+small collective change, measured relative to each coefficient's
+original uncertainty. A tightly concentrated prior generally resists
+change more than a diffuse one. Parameters do not move by equal amounts
+in their raw units.
 
 Here is a small, self-contained housing illustration. These are invented
 teaching data, not an analysis of real sale prices.
@@ -285,33 +290,34 @@ reconciled = house_priors + update_outcome(
 summary(reconciled)
 ```
 
-These beliefs describe the **expected price** for that house. They do not
-include the extra variation among individual sale prices. The probability
-statement constrains uncertainty about that expected price; it can change
-coefficient SDs as well as their means. The residual-scale prior stays the
-same. Add another `update_outcome()` to describe another house; all outcome
-specifications are reconciled together against the original coefficient
-priors, rather than successively replacing them.
+These beliefs describe the **expected price** for that house. They do
+not include the extra variation among individual sale prices. The
+probability statement constrains uncertainty about that expected price;
+it can change coefficient SDs as well as their means. The residual-scale
+prior stays the same. Add another `update_outcome()` to describe another
+house; all outcome specifications are reconciled together against the
+original coefficient priors, rather than successively replacing them.
 
 The priorities are explicit: satisfy outcome beliefs within their stated
-tolerances, preserve explicitly elicited coefficient beliefs as closely as
-possible, and then minimize departure from the baseline joint prior.
-The comparison uses each coefficient's uncertainty, not its raw units, so
-switching from square feet to thousands of square feet doesn't change which
-beliefs matter most. Probability beliefs are compared in standard-Normal
-quantile units, so small tail probabilities keep their meaning. Numerical
-tolerances still decide whether each original statement holds.
-Backend defaults supply an anchor, not additional explicit beliefs. If a
-coefficient belief has to be relaxed, a warning says so. Its original
-statement is retained. `summary(reconciled)` compares requested and achieved
-outcomes, then groups each changed coefficient prior with the beliefs it
-compromised. Unchanged priors and satisfied beliefs stay out of the table.
-Add `diagnostics = TRUE` for the complete comparison and mathematical
-details. Incompatible or numerically unresolved outcome specifications
-cannot be exported or fitted.
+tolerances, preserve explicitly elicited coefficient beliefs as closely
+as possible, and then minimize departure from the baseline joint prior.
+The comparison uses each coefficient's uncertainty, not its raw units,
+so switching from square feet to thousands of square feet doesn't change
+which beliefs matter most. Probability beliefs are compared in
+standard-Normal quantile units, so small tail probabilities keep their
+meaning. Numerical tolerances still decide whether each original
+statement holds. Backend defaults supply an anchor, not additional
+explicit beliefs. If a coefficient belief has to be relaxed, a warning
+says so. Its original statement is retained. `summary(reconciled)`
+compares requested and achieved outcomes, then groups each changed
+coefficient prior with the beliefs it compromised. Unchanged priors and
+satisfied beliefs stay out of the table. Add `diagnostics = TRUE` for
+the complete comparison and mathematical details. Incompatible or
+numerically unresolved outcome specifications cannot be exported or
+fitted.
 
-Now inspect the implications, rather than treating optimization as evidence
-that the priors are substantively sensible:
+Now inspect the implications, rather than treating optimization as
+evidence that the priors are substantively sensible:
 
 ```{r outcome-belief-check}
 set.seed(28)
@@ -322,11 +328,12 @@ house_check = check_prior(
 plot(house_check, type = "outcome", response = "expected")
 ```
 
-For a relationship across houses, use `plot(house_check, type = "model")`
-with a recent flexplot providing its public prediction renderer. A check
-built from a wider predictor grid is more informative than this one house.
-Use `response = "simulated"` to add individual-outcome variation; that is a
-different question from the beliefs above.
+For a relationship across houses, use
+`plot(house_check, type = "model")` with a recent flexplot providing its
+public prediction renderer. A check built from a wider predictor grid is
+more informative than this one house. Use `response = "simulated"` to
+add individual-outcome variation; that is a different question from the
+beliefs above.
 
 ### Keep the expert's answers
 
@@ -346,21 +353,23 @@ summary(interview)
 ```
 
 Keep those answers, even when this model cannot represent them together.
-The summary identifies conflicts the mathematics can establish. A numerical
-failure is reported separately: a solver getting stuck doesn't make the
-expert wrong. Neither result discards the answers or selects an unverified
-prior. Ask about the **expected price** for each kind of house; uncertainty
-about one actual sale also includes variation this elicitation leaves out.
+The summary identifies conflicts the mathematics can establish. A
+numerical failure is reported separately: a solver getting stuck doesn't
+make the expert wrong. Neither result discards the answers or selects an
+unverified prior. Ask about the **expected price** for each kind of
+house; uncertainty about one actual sale also includes variation this
+elicitation leaves out.
 
-The default `tolerance = 1e-6` is a numerical matching rule, not a claim that
-an expert knows prices to a millionth of a dollar. If the estimate means
-"about $300,000, to the nearest $10,000," record that precision explicitly:
-`belief(mode = 300000, tolerance = 5000)`. If a probability is reported to
-the nearest percentage point, `tolerance = .005` expresses that rounding.
-Choose these tolerances from the interview protocol, rather than widening
-them afterwards to make a model fit. They control how closely the model
-matches an answer; the probability statements describe uncertainty about
-expected prices. None of the recorded targets are rewritten.
+The default `tolerance = 1e-6` is a numerical matching rule, not a claim
+that an expert knows prices to a millionth of a dollar. If the estimate
+means "about \$300,000, to the nearest \$10,000," record that precision
+explicitly: `belief(mode = 300000, tolerance = 5000)`. If a probability
+is reported to the nearest percentage point, `tolerance = .005`
+expresses that rounding. Choose these tolerances from the interview
+protocol, rather than widening them afterwards to make a model fit. They
+control how closely the model matches an answer; the probability
+statements describe uncertainty about expected prices. None of the
+recorded targets are rewritten.
 
 ### A little mathematics, if you want it
 
@@ -376,9 +385,9 @@ E(M)=\mathbf{x}^T\boldsymbol\mu,\qquad
 $$
 
 After prioritizing explicit beliefs, the preference criterion is
-$\mathrm{KL}(\text{adjusted prior}\;||\;\text{original prior})$. It measures
-both changes in location and changes in uncertainty in units of the
-original priors.
+$\mathrm{KL}(\text{adjusted prior}\;||\;\text{original prior})$. It
+measures both changes in location and changes in uncertainty in units of
+the original priors.
 
 For one **exact location constraint with variances held fixed**, the
 minimum-Mahalanobis solution is
@@ -391,14 +400,14 @@ $$
 
 That formula is a useful benchmark, not the solution to general
 mean-and-variance reconciliation. The general method uses numerical
-optimization and checks achieved beliefs against their tolerances.
-It currently requires Gaussian identity models, numeric predictors, and
+optimization and checks achieved beliefs against their tolerances. It
+currently requires Gaussian identity models, numeric predictors, and
 independent Normal coefficient priors. Independence is in the centered
 parameterization; categorical predictors, Student's t priors, and
-individual-outcome elicitation are not supported here. More general beliefs
-could require coefficient correlations that this initial method cannot
-represent. See the *Joint outcome elicitation: method and limitations*
-vignette for the optimization details.
+individual-outcome elicitation are not supported here. More general
+beliefs could require coefficient correlations that this initial method
+cannot represent. See the *Joint outcome elicitation: method and
+limitations* vignette for the optimization details.
 
 ## Other ways to express your beliefs
 
@@ -429,7 +438,8 @@ and `fit(revised)` to fit the original model. We'll leave both for
 later. We haven't needed to fit a model to examine our priors.
 
 See [`identify_priors()`](../html/identify_priors.html),
-[`belief()`](../html/belief.html), [`update()` for prior
+[`belief()`](../html/belief.html),
+[`update_priors()`](../html/update_priors.html), [`update()` for prior
 objects](../html/update.flexbayes_priors.html),
 [`check_prior()`](../html/check_prior.html),
 [`as_rstanarm()`](../html/as_rstanarm.html), and
