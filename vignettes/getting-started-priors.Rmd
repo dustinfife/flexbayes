@@ -13,27 +13,25 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7,
                      fig.height = 4, message = FALSE, error = FALSE)
-library(flexbayes)
+devtools::load_all()
 ```
 
 ## Why elicit priors?
 
-Suppose we're studying whether students who study longer get higher test
-scores. Earlier research may already suggest that another hour helps,
-though probably not by 40 points.
+Let's say we're studying whether students who study longer get higher
+test scores. Let's also say that research may already suggest that
+another hour helps, though probably not by 40 points.
 
 Those expectations can become a **prior**: what we believe about a model
 parameter before using outcome evidence to estimate it. When using
 **flexbayes**, we would state these beliefs in a convenient way, then
-the computer finds the right distribution to fit, then beliefs, fit
-candidate distributions to them, and examine their implications before
-fitting the model.
+the computer finds the right distribution to fit. Afterwards, we can
+examine the implication of said priors before fitting the model.
 
-We'll use a Gaussian regression of test score (`y`) on study hours (`x`)
-and additional practice sessions (`z`). These data are simulated so you
-can reproduce the example. Imagine that our beliefs come from earlier
-research and subject-matter knowledge, rather than a regression fitted
-to these outcomes.
+Let's go ahead and start with an easy example using regression. More
+specifically, we'll investigate how study hours (`x`) and additional
+practice sessions (`z`) affect test scores (`y`). Let's go ahead and
+simulate the data, just to make it easier:
 
 ```{r data}
 set.seed(2026)
@@ -46,97 +44,198 @@ d$y = 50 + 3 * d$x + 2 * d$z + rnorm(nrow(d), sd = 4)
 
 ## Identify existing priors
 
-Before supplying our own beliefs, let's see what the backend would use.
-Install `rstanarm` to follow along. The current default-prior adapter is
-verified for **rstanarm 2.32.2**; other versions produce an error rather
-than a guess about their defaults. We won't run Stan sampling here.
+Bayesian analysis requires priors before it can even run. For this
+reason, various packages dedicated to bayesian analysis set default
+priors. Because we're lazy data analysts, it might be a good idea to see
+what these packages would provide as priors if we did nothing. We're
+going to inspect these priors, not because we're going to use them, but
+we're going to do that so we know what priors our model requires. That's
+like half the battle.
+
+Conveniently, we have a function called `identify_priors()` that will
+help us...er...identify priors. Go figure. This function requires the
+following arguments:
+
+- `formula`: this is the formula for the model you're going to
+  eventually use to estimate the model's parameters. This is exactly
+  what you would normally input in a regular-ole `lm` model.
+
+- `data`: your dataset. Yeah, that's a pretty important thing to
+  provide.
+
+- `family`: This parameter specifies what distribution you're using to
+  model the outcome. For this first analysis, you can ignore this
+  argument. If you end up doing logistic regression (or poisson, or
+  gamma), you'd have to modify the family.
+
+- `package`: Eventually we're going to fit a model and feed said model
+  our priors. This argument tells R which package you're going to use to
+  fit the model. By default, this is "rstanarm". The alternative is
+  "brms".
+
+So, for our example, we might use the following:
 
 ```{r identify}
 priors = identify_priors(
   y ~ x + z,
   data = d,
-  family = gaussian(),
   package = "rstanarm"
 )
 print(priors)
 ```
 
-Each row shows a parameter, its selected prior, its source, and our
-belief count. That count is zero so far: these are backend defaults.
+Remember, the primary purpose of this function is to tell you what
+priors this sort of model expects. Each row displays:
 
-In `Normal(a, b)`, `a` is the location and `b` is the standard
-deviation. `Exponential(r)` uses rate `r`. Students with the same study
-hours and practice sessions can still get different scores. The `sigma`
-row describes that residual variation around their modelled expected
-scores.
+- the parameter name
 
-One detail deserves a pause: the intercept is **centered**. It describes
-the expected score at 5 study hours and 1 practice session, the training
-model-matrix column means, rather than at zero study hours.
-`summary(priors, diagnostics = TRUE)` shows these reference values.
+- the current prior (this is what the software defaults to). Notice that
+  most of them are "Normal," meaning that it's assuming this particular
+  parameter follows a normal distribution. The first parameter (e.g.,
+  66.71 for the intercept) indicates the mean. The second indicates the
+  assumed standard deviation.
 
-There's a qualification: Gaussian backend defaults use observed outcome
-summaries and predictor scales. They are data-dependent references,
-rather than fully data-independent substantive beliefs. flexbayes makes
-them explicit and uses the same resolved priors for plots, predictive
-checks, and fitting.
+- the source of the prior (currently all of them say "Backend default,"
+  indicating this is coming from `rstanarm`.
+
+- the number of `beliefs` we have specified for each parameter. All the
+  beliefs are currently zero because we haven't specified any prior
+  beliefs yet.
+
+One detail deserves a bit of a pause: the intercept is *centered*. What
+does that mean? It means that the R package (rstanarm) expects the user
+to tell us what we think the *mean* of Y would be if all the predictor
+variables are at their mean. This is actually very convenient because
+then we don't have to think about what the slope of score would be if we
+studied zero hours and had zero practice sessions. (That's what we'd
+have to do if we didn't *center* the scores...which would be wildly
+inconvenient and taxing on the brain.)
+
+For our example, that intercept prior (66.71) tells us that the prior
+assumes the average test score is 66.71 if we study the mean number of
+study hours (it turns out it's 5 in this case...jeez! That's a high
+number!) and have the mean number of practice sessions (in this case, 1
+is the mean number of practice sessions). .
+`summary(priors, diagnostics = TRUE)` shows the mean values of the
+predictors.
+
+That introduces a bit of a caveat: rstanarm use the *observed data*
+summaries (means...and also standard deviations) to inform the priors.
+That's a bit backwards and contrary to how bayesian priors are supposed
+to be elicited, but rstanarm considers this a necessary sacrifice for
+those instances where the user doesn't provide priors. I have no strong
+opinions on this.
 
 ## Express beliefs
 
-Suppose earlier research suggests that an extra study hour most
-plausibly adds 3 score points, holding practice sessions constant. We
-can say that directly:
+So far, we've let the computer identify and specify the priors (or at
+least *provisionally* specify the priors). But we wouldn't be true
+Bayesians if we left it at that. Fortunately, we know what priors need
+to be specified (intercept, x, z, and sigma). So now begins the
+delightful task of specifying priors for these parameters. Suppose
+earlier research suggests that an extra study hour most plausibly adds 3
+points, holding practice sessions constant. We can say that directly:
 
 ```{r first-belief}
-priors = priors + update_priors("x", belief(mode = 3))
+priors = priors + 
+  update_priors("x", belief(mode = 3))
 print(priors)
 ```
 
-We told flexbayes where the distribution should peak, but we didn't say
-anything about its width. In this example, flexbayes kept the standard
-deviation from the backend's default prior. That's what `Elicited*`
-means here: we supplied the peak; the backend supplied the width.
+Notice the syntax: we're taking our existing `prior` object and *adding*
+to it our own personal priors. There are two functions that serve
+different purposes:
 
-Let's add something about the uncertainty. Suppose we'd give a 95%
-probability to the study-hour slope being below 6 points:
+1.  The `update_priors()` function. This function, not surprisingly,
+    *updates* our existing prior object. It takes two arguments: the
+    first is a string that indicates which prior we're going to update.
+    (In this case, we're updating the prior for "x"). The second
+    argument is another function called `belief()`. Speaking of which...
+2.  The `belief()` function. This tells R what values our prior beliefs
+    actually take. In this example, we're updating our priors for `x`
+    such that the distribution of `x` has a mode of 3.\
 
-```{r second-belief}
-priors = priors + update_priors(
-  "x",
-  belief(value < 6, probability = .95)
-)
+## The `belief` Function
+
+Alright, that `belief()` function is pretty important, so I think it
+deserves its own section. And maybe an "Employee of the Month" award.
+There are essentially two ways to express beliefs. The first way is to
+explicitly state your belief about the mode, mean, or sd, like this:
+
+- `belief(mode = 100)`
+
+- `belief(mean = 1999)`
+
+- `belief(sd = 12)`
+
+You can even add multiple ones at the same time:
+
+```{r}
+priors = priors +
+  update_priors("x",
+    belief(mode = 3),
+    belief(sd = 1.2)
+  )
 ```
 
-`value` stands for the coefficient. We're expressing uncertainty about
-the study-hour slope; we aren't saying that 95% of students gain fewer
-than 6 points. The earlier mode belief is still there. `update_priors()`
-describes the beliefs; `+` applies them while keeping existing beliefs.
-It returns a revised object, so we assign the result back to `priors`.
+The above code tells the computer that you belief your parameter for `x`
+follows a normal distribution with a mode of 3 (but, because it's
+normal, the mode is the same as the mean) and a standard deviation of
+1.2.
+
+The other way to use the `belief()` function is to use probabilities.
+Let's say that specifying our prior for `z` isn't as easy as stating the
+mean (or mode) and the standard deviation of its probability density
+function. Maybe we don't know the standard deviation, but we can
+estimate probabilities. For example, we might say that we think the mode
+of `z` is 1.5, but we don't know the standard deviation. However, we
+might be confident in saying that there's only a 5% chance the the best
+value of `z` is smaller than .5. We could express that with our
+`belief()` function:
+
+```{r}
+priors = priors + 
+  update_priors("z",
+    belief(mode = 1.5),
+    belief(value<.5, .05)
+  )
+```
+
+Now, we can inspect our priors object to see what probability density
+function the computer selected from that information:
+
+```{r}
+priors
+```
+
+Now that is cool! Let's walk through what we did: we told the computer
+that we think the mode is 1.5, but we didn't know what sort of standard
+deviation to specify. Instead, we told the computer that there was less
+than a 5% chance the mode was smaller than .5. In the background, the
+computer identified the appropriate distribution for us!
 
 ## Examine the selected prior
 
-Now let's see what distribution came out of those two statements.
+At this point, it might be nice to show the distribution of our priors:
 
 ```{r inspect}
-summary(priors, diagnostics = TRUE)
+plot(priors)
+```
+
+But we could also specify which parameter we want to visualize. There's
+an added benefit of doing so; it will show us alternative candidate
+distributions the computer considered. In this case, it shows both a
+normal and a t-distribution.
+
+```{r}
 plot(priors, parameter = "x")
 ```
 
-The summary numbers our beliefs and compares requested and achieved
-values. Candidates must satisfy every tolerance. The package ranks
-acceptable candidates and selects one the backend can represent.
-
-Use `plot(priors)` to see the selected distributions for all parameters.
-Here, `parameter = "x"` compares acceptable candidates for the
-study-hour slope and marks the selected one. It's a regular ggplot
-object; you can add `ggplot2::theme_bw()`. The other parameters still
-have their backend defaults. We'll need to think about those too: one
-reassuring density can't tell us what the whole model will predict.
-
 ## What if the beliefs do not fit?
 
-It's easy to write two statements that sound reasonable separately.
-Let's see what happens when we add these:
+Remember that, when we specify our beliefs, the computer does its best
+to find a distribution that fits those criteria. But what happens if we
+give the computer contradictory information?
 
 ```{r contradictory}
 priors = priors + update_priors(
@@ -147,26 +246,27 @@ priors = priors + update_priors(
 summary(priors)
 ```
 
-Beliefs 3 and 4 put 95% probability below 0 and another 95% above 1.
-Those regions don't overlap. We're trying to allocate 1.90 worth of
+Uh oh. Notice that the "Source" column indicates that our priors for `x`
+are "Contradictory." That makes sense; we told the computer there's a
+95% probability values are less then one, while also telling the
+computer there's a 95% probability values are greater than 1. Those
+regions don't overlap. We're trying to allocate 1.90 worth of
 probability when there's only 1 to allocate.
 
 A different distribution won't rescue that. flexbayes keeps the beliefs
 visible and marks the contradiction instead of reverting to a default.
-We need to reconsider the statements. Here, we'll remove the two we
-added:
+We need to reconsider the statements. Fortunately, it's easy to remove a
+belief:
 
 ```{r repair}
-priors = update(priors, parameter = "x", remove = c(3, 4))
-print(priors)
+priors = update(priors, parameter = "x", remove = c(4, 5))
+priors
 ```
 
-The removal numbers are the **current displayed numbers within that
-parameter**. Use `update()` when removing beliefs; it can also add
-replacements in the same call. The earlier `update()` syntax for adding
-beliefs still works.
+Now the Source column has reverted to saying "Elicited" instead of
+"Contradictory."
 
-These failures can look similar on screen, but need different responses:
+There are other failures we might encounter:
 
 - **Insufficient information:** we haven't said enough to determine a
   prior. Defaults may supply a disclosed reference; a belief about
@@ -191,11 +291,11 @@ the scores using substantive knowledge, without tuning the priors to
 reproduce the observed outcomes.
 
 ```{r predictive}
-prediction_cases = data.frame(x = c(0, 2.5, 5, 7.5, 10), z = 2)
-prediction_cases
-set.seed(52)
-check = check_prior(priors, n = 500, newdata = prediction_cases)
-plot(check, type = "interval")
+# prediction_cases = data.frame(x = c(0, 2.5, 5, 7.5, 10), z = 2)
+# prediction_cases
+# set.seed(52)
+# check = check_prior(priors, n = 500, newdata = prediction_cases)
+# plot(check, type = "interval")
 ```
 
 The earlier `plot(priors)` showed parameter distributions.
@@ -233,16 +333,16 @@ practice-session effect near 2 points. We can add beliefs for both
 parameters in one chain:
 
 ```{r revise-predictive}
-revised = priors +
-  update_priors(
-    "(Intercept)", belief(mean = 65), belief(sd = 8)
-  ) +
-  update_priors(
-    "z", belief(mean = 2), belief(sd = 1)
-  )
-set.seed(52)
-revised_check = check_prior(revised, n = 500, newdata = prediction_cases)
-plot(revised_check, type = "interval")
+# revised = priors +
+#   update_priors(
+#     "(Intercept)", belief(mean = 65), belief(sd = 8)
+#   ) +
+#   update_priors(
+#     "z", belief(mean = 2), belief(sd = 1)
+#   )
+# set.seed(52)
+# revised_check = check_prior(revised, n = 500, newdata = prediction_cases)
+# plot(revised_check, type = "interval")
 ```
 
 Compare expected-score uncertainty at the same predictor values. The
@@ -275,19 +375,19 @@ Here is a small, self-contained housing illustration. These are invented
 teaching data, not an analysis of real sale prices.
 
 ```{r outcome-beliefs}
-houses = data.frame(
-  sqft = c(1200, 1800, 2100, 2500, 3000, 3300),
-  age = c(40, 20, 30, 10, 5, 25),
-  bedrooms = c(2, 3, 3, 4, 4, 5),
-  price = c(180000, 250000, 290000, 340000, 430000, 450000)
-)
-house_priors = identify_priors(price ~ sqft + age + bedrooms, houses)
-reconciled = house_priors + update_outcome(
-  at = list(sqft = 3000, age = 30, bedrooms = 3),
-  belief(mode = 450000),
-  belief(value < 350000, probability = .05)
-)
-summary(reconciled)
+# houses = data.frame(
+#   sqft = c(1200, 1800, 2100, 2500, 3000, 3300),
+#   age = c(40, 20, 30, 10, 5, 25),
+#   bedrooms = c(2, 3, 3, 4, 4, 5),
+#   price = c(180000, 250000, 290000, 340000, 430000, 450000)
+# )
+# house_priors = identify_priors(price ~ sqft + age + bedrooms, houses)
+# reconciled = house_priors + update_outcome(
+#   at = list(sqft = 3000, age = 30, bedrooms = 3),
+#   belief(mode = 450000),
+#   belief(value < 350000, probability = .05)
+# )
+# summary(reconciled)
 ```
 
 These beliefs describe the **expected price** for that house. They do
@@ -320,12 +420,12 @@ Now inspect the implications, rather than treating optimization as
 evidence that the priors are substantively sensible:
 
 ```{r outcome-belief-check}
-set.seed(28)
-house_check = check_prior(
-  reconciled, n = 1000,
-  newdata = data.frame(sqft = 3000, age = 30, bedrooms = 3)
-)
-plot(house_check, type = "outcome", response = "expected")
+# set.seed(28)
+# house_check = check_prior(
+#   reconciled, n = 1000,
+#   newdata = data.frame(sqft = 3000, age = 30, bedrooms = 3)
+# )
+# plot(house_check, type = "outcome", response = "expected")
 ```
 
 For a relationship across houses, use
@@ -340,16 +440,16 @@ beliefs above.
 Suppose a real estate professional gives these answers for two houses:
 
 ```{r expert-interview, warning=FALSE}
-interview = house_priors +
-  update_outcome(
-    at = list(sqft = 1500, age = 30, bedrooms = 3),
-    belief(mode = 300000), belief(value < 250000, probability = .05)
-  ) +
-  update_outcome(
-    at = list(sqft = 3000, age = 30, bedrooms = 3),
-    belief(mode = 500000), belief(value < 400000, probability = .05)
-  )
-summary(interview)
+# interview = house_priors +
+#   update_outcome(
+#     at = list(sqft = 1500, age = 30, bedrooms = 3),
+#     belief(mode = 300000), belief(value < 250000, probability = .05)
+#   ) +
+#   update_outcome(
+#     at = list(sqft = 3000, age = 30, bedrooms = 3),
+#     belief(mode = 500000), belief(value < 400000, probability = .05)
+#   )
+# summary(interview)
 ```
 
 Keep those answers, even when this model cannot represent them together.
@@ -417,12 +517,12 @@ outcome SDs, for a one-SD increase in study hours. Here's a separate
 specification using that language:
 
 ```{r standardized}
-standardized = update(
-  priors, parameter = "x", remove = c(1, 2),
-  belief(mode = .3, scale = "standardized"),
-  belief(sd = .15, scale = "standardized")
-)
-print(standardized)
+# standardized = update(
+#   priors, parameter = "x", remove = c(1, 2),
+#   belief(mode = .3, scale = "standardized"),
+#   belief(sd = .15, scale = "standardized")
+# )
+# print(standardized)
 ```
 
 The conversion uses the observed sample SDs:
