@@ -36,7 +36,7 @@ simulate the data, just to make it easier:
 ```{r data}
 set.seed(2026)
 d = data.frame(
-  x = seq(0, 10, length.out = 30),
+  x = seq(0, 2, length.out = 30),
   z = rep(0:2, 10)
 )
 d$y = 50 + 3 * d$x + 2 * d$z + rnorm(nrow(d), sd = 4)
@@ -101,30 +101,6 @@ priors this sort of model expects. Each row displays:
 - the number of `beliefs` we have specified for each parameter. All the
   beliefs are currently zero because we haven't specified any prior
   beliefs yet.
-
-One detail deserves a bit of a pause: the intercept is *centered*. What
-does that mean? It means that the R package (rstanarm) expects the user
-to tell us what we think the *mean* of Y would be if all the predictor
-variables are at their mean. This is actually very convenient because
-then we don't have to think about what the slope of score would be if we
-studied zero hours and had zero practice sessions. (That's what we'd
-have to do if we didn't *center* the scores...which would be wildly
-inconvenient and taxing on the brain.)
-
-For our example, that intercept prior (66.71) tells us that the prior
-assumes the average test score is 66.71 if we study the mean number of
-study hours (it turns out it's 5 in this case...jeez! That's a high
-number!) and have the mean number of practice sessions (in this case, 1
-is the mean number of practice sessions). .
-`summary(priors, diagnostics = TRUE)` shows the mean values of the
-predictors.
-
-That introduces a bit of a caveat: rstanarm use the *observed data*
-summaries (means...and also standard deviations) to inform the priors.
-That's a bit backwards and contrary to how bayesian priors are supposed
-to be elicited, but rstanarm considers this a necessary sacrifice for
-those instances where the user doesn't provide priors. I have no strong
-opinions on this.
 
 ## Express beliefs
 
@@ -231,6 +207,53 @@ normal and a t-distribution.
 plot(priors, parameter = "x")
 ```
 
+## Specifying Priors for the Intercept. 
+
+One detail deserves a bit of a pause: the intercept is *centered*. What
+does that mean? It means that the R package (rstanarm) expects the user
+to tell us what we think the *mean* of Y would be if all the predictor
+variables are at their mean. This is actually very convenient because
+then we don't have to think about what the slope of score would be if we
+studied zero hours and had zero practice sessions. (That's what we'd
+have to do if we didn't *center* the scores...which would be wildly
+inconvenient and taxing on the brain.)
+
+But it's even easier than that. There's this really cool property of OLS
+regression that says:
+
+$$
+\bar{Y} = \bar{X}\beta 
+$$
+
+That's just a fancy way of saying that in typical regression models,
+when our predictors are all at their mean, the model must also predict
+that Y will be at its mean. Of course, that's a property of OLS, so
+there's no guarantee a Bayesian estimate will satisfy that property, but
+it still provides a convenient heuristic to use: when specifying a prior
+for the intercept, just input your best guess of the mean.
+
+> **Caveat:** That introduces a bit of a caveat: rstanarm uses the
+> *observed data* summaries (means...and also standard deviations) to
+> inform the priors. That's a bit backwards and contrary to how bayesian
+> priors are supposed to be elicited, but rstanarm considers this a
+> necessary sacrifice for those instances where the user doesn't provide
+> priors. I have no strong opinions on this.
+
+We should probably also specify a prior for the standard deviation of
+the intercept prior. Again, this number is used to represent our
+uncertainty about the intercept's mode (or mean or whatever we specify).
+So maybe we decide that the mean of our intercept distribution is a test
+score of 85%. And maybe we're 90% confident the mean is at least 70%:
+
+```{r}
+priors = priors +
+  update_priors(
+    "(Intercept)",
+    belief(mean = 85),
+    belief(value<70, probability = .1)
+  )
+```
+
 ## What if the beliefs do not fit?
 
 Remember that, when we specify our beliefs, the computer does its best
@@ -248,10 +271,10 @@ summary(priors)
 
 Uh oh. Notice that the "Source" column indicates that our priors for `x`
 are "Contradictory." That makes sense; we told the computer there's a
-95% probability values are less then one, while also telling the
-computer there's a 95% probability values are greater than 1. Those
+95% probability values are less then zero, while also telling the
+computer there's a 95% probability values are greater than one. Those
 regions don't overlap. We're trying to allocate 1.90 worth of
-probability when there's only 1 to allocate.
+probability when there's only one to allocate.
 
 A different distribution won't rescue that. flexbayes keeps the beliefs
 visible and marks the contradiction instead of reverting to a default.
@@ -266,20 +289,288 @@ priors
 Now the Source column has reverted to saying "Elicited" instead of
 "Contradictory."
 
-There are other failures we might encounter:
+There are other failures we might encounter in the source column:
 
-- **Insufficient information:** we haven't said enough to determine a
-  prior. Defaults may supply a disclosed reference; a belief about
-  spread or a probability supplies more of our own knowledge.
-- **Contradiction:** our statements conflict with each other. We need to
-  investigate what we meant before revising them.
-- **No supported or compatible prior:** the statements may be sensible,
-  but the available families or backend can't represent them together.
-  For example, rstanarm requires one shared slope-prior family. The
-  diagnostics explain the problem; an unresolved parameter prevents
-  predictive checking and fitting.
+- **Incompatible:** this means that valid candidate distributions do
+  exist, but they have backend restrictions. The `rstanarm` package
+  places certain restrictions on priors (e.g., they must come from the
+  same distribution family). When the elicited priors violate these
+  restrictions, it will display "Incompatible."
+- **Unresolved:** This means that the computer couldn't find a
+  distribution that fit your requirements.
 
-## Check what the priors imply
+To investigate problems, you can type
+`summary(priors, diagnostics = TRUE)` for more information.
+
+## Specifying Priors Based on the Outcome
+
+Sometimes it might be a bit difficult to think in terms of parameters
+and their distributions. For example, you might be predicting the sale
+price of a house based on `age`, `sqft`, and `bedrooms`. It might be
+hard to figure out how much the price of a home drops (or increases)
+when you add a bedroom or increase square footage by one. Even with the
+help of an expert (e.g., a real estate agent), these experts might be
+hard pressed to identify how much value increases per bedrooms added
+(and what that variance might be). On the other hand, I suspect a real
+estate agent would be quite good if you instead asked questions like
+these:
+
+- What would be the average price of a house that is 1200 square feet, 2
+  bedrooms, and was built 10 years ago?
+
+- What about a house that is 1200 square feet, 2 bedrooms, but was built
+  30 years ago?
+
+I'm guessing a good real estate agent would be able to give you an
+estimate. Suppose, for this example, the first house is estimated to
+sell around \$250,000, while the second house is estimate to sell around
+\$195,000. But notice what we did there: in our question, we kept square
+footage and bedrooms constant, while changing the age from 10 to 30. We
+could then take the real estate agent's guesses and convert that into a
+slope:
+
+$$
+\begin{align}
+\beta_{age} &= \frac{$250,000 - $195,000}{10-30} \\
+            &= \frac{$55,000}{-20} \\
+            &= -$2,750
+\end{align}
+$$
+
+Of course, *you* don't have to do this. Instead, you can use the
+`update_outcome` function. To demonstrate, we'll use the `homes_2024`
+dataset that contains the sale prices/characteristics of homes in 2024
+from a county in New Jersey.
+
+```{r}
+data(homes_2024)
+priors = identify_priors(
+  sale_price ~ sqft + age + bedrooms,
+  data = homes_2024,
+  family = gaussian(),
+  package = "rstanarm"
+) +
+  update_outcome(
+    at = list(sqft = 1200, bedrooms = 2, age = 10),
+    belief(mode = 250000)
+  ) +
+  update_outcome(
+    at = list(sqft = 1200, bedrooms = 2, age = 30),
+    belief(mode = 195000)
+  ) 
+
+```
+
+\
+
+```{r}
+priors
+```
+
+Not surprisingly, our mean estimate of the slope of age is 2750. (That's
+a relief. I did the math in my head).
+
+Unfortunately, this only tells us where the prior distribution should be
+centered. It doesn't tell us how uncertain we should be. So we decide to
+be a little sly and ask the real estate agent another question: "You
+estimated that the average selling price for a ten-year-old home would
+be \$250,000. But how confident are you in that estimate? For example,
+would you be 80% confident that the *true average selling price* is
+somewhere between \$230,000 and \$270,000?"
+
+```{r}
+priors = priors +
+  update_outcome(
+    at = list(sqft = 1200, bedrooms = 3, age = 10),
+    belief(value < 230000, probability = .10),
+    belief(value > 270000, probability = .10)
+  )
+priors
+```
+
+> **Quick sidenote:** There's a subtle distinction we need to make when
+> using `update_outcome()` to express uncertainty. You may recall from
+> introductory statistics that a confidence interval is different from a
+> prediction interval. A confidence interval describes uncertainty about
+> a parameter (such as a regression coefficient or an expected outcome),
+> whereas a prediction interval describes uncertainty about an
+> individual observation.
+>
+> We have a similar distinction in Bayesian statistics. When we use
+> `update_outcome()`, we're specifying beliefs about the *expected
+> outcome* for a particular combination of predictor values, not the
+> range of individual outcomes we might observe.
+>
+> For example, suppose we're talking about houses with three bedrooms,
+> 1,700 square feet, and an age of 10 years. Consider these two
+> questions:
+>
+> - **Individual outcomes:** "If 100 houses like this sold, how many
+>   would sell for less than \$350,000?"
+>
+> - **Expected outcome:** "How confident are you that the *average
+>   selling price* for houses like this is above \$350,000?"
+>
+> The first question concerns variation among individual house sales.
+> The second concerns uncertainty about the average selling price. It's
+> the second kind of belief that `update_outcome()` currently supports.
+
+As before, you can chain beliefs together with `update_outcome` as well.
+What's really cool is that each update doesn't replace the existing
+priors. Instead, you're simply giving the computer more constraints (or,
+you might say, more *direction)* when estimating priors. The computer
+will then prioritize the constraints imposed by `update_outcome` over
+those obtained with `update`. But what happens when our priors conflict
+with one another?
+
+Let's actually take a look at an example of this happening. Let's start
+with adding priors on the parameters:
+
+```{r}
+priors = identify_priors(
+  sale_price ~ sqft + age + bedrooms,
+  data = homes_2024,
+  family = gaussian(),
+  package = "rstanarm"
+) +
+  update_priors(
+    "(Intercept)", 
+    belief(mode = 350000), 
+    belief(value<250000, probability = .05)
+  ) + 
+  update_priors(
+    "sqft",
+    belief(mode = 212), 
+    belief(value<75, probability =.05)
+  ) +
+  update_priors(
+    "age", 
+    belief(mode = -2750), 
+    belief(value<(-5000), probability = .3)
+  ) +
+  update_priors(
+    "bedrooms", 
+    belief(mode = 25000), 
+    belief(value>50000, probability = .05)
+  )
+```
+
+Now let's go ahead and add priors using `update_outcome`. Maybe we go
+back and pester our real estate friend again. This time we ask her to
+estimate the price of two homes; both have 3 bedrooms and are 10 years
+old, but one is 1500 square feet and the other is 1700. She prices the
+first at \$450k and the second at \$425k. Let's go ahead and set that
+up.
+
+```{r}
+# add outcome beliefs that conflict with the sqft belief
+priors = priors +
+  update_outcome(
+    at = list(sqft = 1700, age = 10, bedrooms = 3),
+    belief(mode = 450000)
+  ) +
+  update_outcome(
+    at = list(sqft = 1500, age = 10, bedrooms = 3),
+    belief(mode = 425000)
+  )
+```
+
+We get a warning message! Why? Earlier, we told `flexbayes` that each
+additional square foot should increase the expected price by \$212. But
+our real estate agent's estimates imply an increase of only \$125 per
+square foot:
+
+$$
+\beta_{\text{sqft}} =\frac{450{,}000 - 425{,}000}{1{,}700 - 1{,}500}= \$125 \text{ per square foot}
+$$
+
+Both can't be right.
+
+Fortunately, `flexbayes` knows how to handle this. It prioritizes our
+beliefs about the expected outcomes and tries to adjust the coefficient
+priors while preserving as much of our original beliefs as possible.
+Let's see what happens:
+
+```{r}
+priors
+```
+
+Notice the sqft estimate from the `update_outcome` approach superseded
+the priors from the `update_priors` approach. Our sqft originally was
+\$212, but now it's \$125. Age also changed from -\$2,750 to
+-\$2,738.68. (Apparently, I suck at estimating priors on a parameter).
+Bedrooms also changed from \$25,000 \$25,001.26. Quite a change, that.
+
+In my experience, eliciting priors using the `update_outcome` approach
+is very good at identifying means of parameters, but sometimes a little
+awkward for eliciting standard deviations, so using both `update` and
+`update_outcome` is probably best.
+
+Now, at this point, if you're anything like me, you're deeply skeptical
+of your own priors. Like...what if my priors make no sense whatsoever?
+What if my prior suggests a \$400k house is actually worth pennies?
+Fortunately, we have another tool at our disposal.
+
+```{r outcome-beliefs}
+# houses = data.frame(
+#   sqft = c(1200, 1800, 2100, 2500, 3000, 3300),
+#   age = c(40, 20, 30, 10, 5, 25),
+#   bedrooms = c(2, 3, 3, 4, 4, 5),
+#   price = c(180000, 250000, 290000, 340000, 430000, 450000)
+# )
+# house_priors = identify_priors(price ~ sqft + age + bedrooms, houses)
+# reconciled = house_priors + update_outcome(
+#   at = list(sqft = 3000, age = 30, bedrooms = 3),
+#   belief(mode = 450000),
+#   belief(value < 350000, probability = .05)
+# )
+# summary(reconciled)
+```
+
+These beliefs describe the **expected price** for that house. They do
+not include the extra variation among individual sale prices. The
+probability statement constrains uncertainty about that expected price;
+it can change coefficient SDs as well as their means. The residual-scale
+prior stays the same. Add another `update_outcome()` to describe another
+house; all outcome specifications are reconciled together against the
+original coefficient priors, rather than successively replacing them.
+
+The priorities are explicit: satisfy outcome beliefs within their stated
+tolerances, preserve explicitly elicited coefficient beliefs as closely
+as possible, and then minimize departure from the baseline joint prior.
+The comparison uses each coefficient's uncertainty, not its raw units,
+so switching from square feet to thousands of square feet doesn't change
+which beliefs matter most. Probability beliefs are compared in
+standard-Normal quantile units, so small tail probabilities keep their
+meaning. Numerical tolerances still decide whether each original
+statement holds. Backend defaults supply an anchor, not additional
+explicit beliefs. If a coefficient belief has to be relaxed, a warning
+says so. Its original statement is retained. `summary(reconciled)`
+compares requested and achieved outcomes, then groups each changed
+coefficient prior with the beliefs it compromised. Unchanged priors and
+satisfied beliefs stay out of the table. Add `diagnostics = TRUE` for
+the complete comparison and mathematical details. Incompatible or
+numerically unresolved outcome specifications cannot be exported or
+fitted.
+
+Now inspect the implications, rather than treating optimization as
+evidence that the priors are substantively sensible:
+
+```{r outcome-belief-check}
+# set.seed(28)
+# house_check = check_prior(
+#   reconciled, n = 1000,
+#   newdata = data.frame(sqft = 3000, age = 30, bedrooms = 3)
+# )
+# plot(house_check, type = "outcome", response = "expected")
+```
+
+For a relationship across houses, use
+`plot(house_check, type = "model")` with a recent flexplot providing its
+public prediction renderer. A check built from a wider predictor grid is
+more informative than this one house. Use `response = "simulated"` to
+add individual-outcome variation; that is a different question from the
+beliefs above.
 
 So far we've examined individual coefficients. A prior predictive check
 draws from the **entire collection of selected priors** and generates
@@ -354,86 +645,6 @@ residual-scale elicitation isn't yet supported.
 Keep revising when substantive knowledge justifies it. The check helps
 us discover implications we hadn't considered, without tuning priors to
 imitate the outcomes already in front of us.
-
-## What if you know more about the outcome?
-
-Sometimes a house price is easier to think about than a price
-coefficient. You might know what a particular house ought to cost,
-without knowing how much of its price comes from floor area, age, or
-bedroom count.
-
-Suppose your original priors imply an expected price of \$400,000 for a
-particular house, but you believe \$350,000 is more plausible. Several
-coefficients could contribute to that \$50,000 discrepancy. Assigning it
-all to the intercept would be arbitrary. Instead, flexbayes looks for a
-small collective change, measured relative to each coefficient's
-original uncertainty. A tightly concentrated prior generally resists
-change more than a diffuse one. Parameters do not move by equal amounts
-in their raw units.
-
-Here is a small, self-contained housing illustration. These are invented
-teaching data, not an analysis of real sale prices.
-
-```{r outcome-beliefs}
-# houses = data.frame(
-#   sqft = c(1200, 1800, 2100, 2500, 3000, 3300),
-#   age = c(40, 20, 30, 10, 5, 25),
-#   bedrooms = c(2, 3, 3, 4, 4, 5),
-#   price = c(180000, 250000, 290000, 340000, 430000, 450000)
-# )
-# house_priors = identify_priors(price ~ sqft + age + bedrooms, houses)
-# reconciled = house_priors + update_outcome(
-#   at = list(sqft = 3000, age = 30, bedrooms = 3),
-#   belief(mode = 450000),
-#   belief(value < 350000, probability = .05)
-# )
-# summary(reconciled)
-```
-
-These beliefs describe the **expected price** for that house. They do
-not include the extra variation among individual sale prices. The
-probability statement constrains uncertainty about that expected price;
-it can change coefficient SDs as well as their means. The residual-scale
-prior stays the same. Add another `update_outcome()` to describe another
-house; all outcome specifications are reconciled together against the
-original coefficient priors, rather than successively replacing them.
-
-The priorities are explicit: satisfy outcome beliefs within their stated
-tolerances, preserve explicitly elicited coefficient beliefs as closely
-as possible, and then minimize departure from the baseline joint prior.
-The comparison uses each coefficient's uncertainty, not its raw units,
-so switching from square feet to thousands of square feet doesn't change
-which beliefs matter most. Probability beliefs are compared in
-standard-Normal quantile units, so small tail probabilities keep their
-meaning. Numerical tolerances still decide whether each original
-statement holds. Backend defaults supply an anchor, not additional
-explicit beliefs. If a coefficient belief has to be relaxed, a warning
-says so. Its original statement is retained. `summary(reconciled)`
-compares requested and achieved outcomes, then groups each changed
-coefficient prior with the beliefs it compromised. Unchanged priors and
-satisfied beliefs stay out of the table. Add `diagnostics = TRUE` for
-the complete comparison and mathematical details. Incompatible or
-numerically unresolved outcome specifications cannot be exported or
-fitted.
-
-Now inspect the implications, rather than treating optimization as
-evidence that the priors are substantively sensible:
-
-```{r outcome-belief-check}
-# set.seed(28)
-# house_check = check_prior(
-#   reconciled, n = 1000,
-#   newdata = data.frame(sqft = 3000, age = 30, bedrooms = 3)
-# )
-# plot(house_check, type = "outcome", response = "expected")
-```
-
-For a relationship across houses, use
-`plot(house_check, type = "model")` with a recent flexplot providing its
-public prediction renderer. A check built from a wider predictor grid is
-more informative than this one house. Use `response = "simulated"` to
-add individual-outcome variation; that is a different question from the
-beliefs above.
 
 ### Keep the expert's answers
 
