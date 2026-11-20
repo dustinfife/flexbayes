@@ -207,7 +207,7 @@ normal and a t-distribution.
 plot(priors, parameter = "x")
 ```
 
-## Specifying Priors for the Intercept. 
+## Specifying Priors for the Intercept.
 
 One detail deserves a bit of a pause: the intercept is *centered*. What
 does that mean? It means that the R package (rstanarm) expects the user
@@ -270,15 +270,16 @@ summary(priors)
 ```
 
 Uh oh. We told the computer there is a 95% probability values are less
-than zero and a 95% probability values are greater than one. Those regions
-don't overlap. We're allocating 1.90 worth of probability when there's
-only one to allocate. A different distribution won't rescue that.
+than zero and a 95% probability values are greater than one. Those
+regions don't overlap. We're allocating 1.90 worth of probability when
+there's only one to allocate. A different distribution won't rescue
+that.
 
 flexbayes keeps these beliefs and reports the contradiction. The Source
 column now identifies the **previous elicited prior (fallback)**. That
 prior is still available to inspect, but it has not satisfied our new
-beliefs. If we had not successfully elicited a prior yet, flexbayes would
-retain the original backend default instead.
+beliefs. If we had not successfully elicited a prior yet, flexbayes
+would retain the original backend default instead.
 
 Fortunately, it's easy to remove the contradictory statements:
 
@@ -287,19 +288,20 @@ priors = update(priors, parameter = "x", remove = c(4, 5))
 priors
 ```
 
-The remaining beliefs fit again, so Source returns to "Elicited."
-Other failures have different explanations: a supported family might not
-fit otherwise consistent beliefs, backend restrictions might block a
+The remaining beliefs fit again, so Source returns to "Elicited." Other
+failures have different explanations: a supported family might not fit
+otherwise consistent beliefs, backend restrictions might block a
 candidate, or a numerical search might fail. A failed numerical search
-isn't proof that the beliefs are mathematically impossible.
-Use `summary(priors, diagnostics = TRUE)` to investigate.
+isn't proof that the beliefs are mathematically impossible. Use
+`summary(priors, diagnostics = TRUE)` to investigate.
 
 Retaining a prior doesn't mean approving its use. `as_rstanarm()`,
 `fit()` and `check_prior()` stop when elicitation has failed. To use the
-retained priors deliberately, pass `allow_fallback = TRUE`; you'll get
-a warning, and the unmet beliefs stay in the object. Removing or replacing
+retained priors deliberately, pass `allow_fallback = TRUE`; you'll get a
+warning, and the unmet beliefs stay in the object. Removing or replacing
 the troublesome beliefs lets flexbayes try again. Failed outcome
-reconciliation likewise retains the previous coherent coefficient priors.
+reconciliation likewise retains the previous coherent coefficient
+priors.
 
 ## Specifying Priors Based on the Outcome
 
@@ -497,13 +499,108 @@ priors
 Notice the sqft estimate from the `update_outcome` approach superseded
 the priors from the `update_priors` approach. Our sqft originally was
 \$212, but now it's \$125. Age also changed from -\$2,750 to
--\$2,738.68. (Apparently, I suck at estimating priors on a parameter).
-Bedrooms also changed from \$25,000 \$25,001.26. Quite a change, that.
+-\$4,504.88. (Apparently, I suck at estimating priors on a parameter).
+Bedrooms also changed from \$25,000 \$24,804.33.
 
 In my experience, eliciting priors using the `update_outcome` approach
 is very good at identifying means of parameters, but sometimes a little
 awkward for eliciting standard deviations, so using both `update` and
 `update_outcome` is probably best.
+
+## Specifying Priors for Sigma
+
+We've now specified priors for the intercept and slopes of our
+regression model. But there's one parameter we've been neglecting:
+`sigma`. And it's actually a pretty important one.
+
+Remember, regression models don't predict outcomes perfectly. Even if
+two houses have exactly the same square footage, age, and number of
+bedrooms, they probably won't sell for exactly the same price. There are
+lots of reasons for this: maybe one house has a nicer kitchen, maybe one
+has a swimming pool, or maybe the buyer just really, *really* liked the
+color of the bathroom.
+
+This unexplained variation is represented by a parameter called $\sigma$
+(sigma). More specifically, sigma is the standard deviation of the
+residuals. If $\sigma = \$30,000$, that means approximately 68% of
+houses would sell within \$30,000 of their expected price (assuming
+normally distributed residuals).
+
+But remember, we're Bayesians now. We don't know what the value of sigma
+is, so we need to specify a *prior distribution* for it. In other words,
+we need to express our uncertainty about how much unexplained variation
+there is.
+
+Let's say we believe the residual standard deviation is probably around
+\$30,000. We could specify that belief just like we did for our other
+parameters:
+
+```{r}
+priors = identify_priors(
+  sale_price ~ sqft + age + bedrooms,
+  data = homes_2024,
+  family = gaussian(),
+  package = "brms"
+) +
+  update_priors(
+    "sigma",
+    belief(mode = 30000)
+  )
+
+summary(priors)
+```
+
+Notice that `flexbayes` selected a Gamma distribution. Don't worry if
+you've never heard of that distribution. That's the whole point of
+`flexbayes`: *you* tell the computer what you believe, and *it* figures
+out which distribution to use.
+
+But there's a problem. We told the computer the most likely value of
+sigma, but we didn't say anything about how uncertain we are. Is
+\$60,000 a plausible value? What about \$100,000? We haven't told the
+computer, so it has to make some assumptions of its own.
+
+And those assumptions can have some pretty dramatic consequences. In
+this example, the computer selects a distribution with a mode of
+\$30,000, but a mean of nearly \$150,000! That's probably not what we
+had in mind.
+
+So let's give the computer a little more information. Suppose we're
+willing to say there's only a 5% chance the residual standard deviation
+exceeds \$60,000:
+
+```{r}    
+priors = priors +
+  update_priors(
+    "sigma",
+    belief(value > 60000, probability = .05)
+  )
+
+summary(priors)
+```
+
+Now look what happens! The computer still selects a Gamma distribution,
+but this time the mode is \$30,000, the mean is approximately \$35,200,
+and the standard deviation of our *prior for sigma* is around \$13,500.
+
+Let's actually take a look at that distribution:
+
+```{r}       
+plot(priors, parameter = "sigma")
+```
+
+That seems much more reasonable. We've told the computer that \$30,000
+is our best guess, but we've also specified how plausible we think
+larger values are.
+
+There's one distinction worth emphasizing here. The standard deviation
+of our **prior for sigma** is not the same as sigma itself. Sigma tells
+us how much *individual house prices* vary around their expected values.
+The standard deviation of the prior tells us how uncertain we are about
+*that amount of variation*. It's a standard deviation for a standard
+deviation. (Statistics is fun, isn't it?)
+
+One final detail: we're using `brms` here because it supports more flexible priors for sigma. For example, `rstanarm` doesn't support any sigma-prior distributions whose most likely value is greater than zero. So if we tried `belief(mode = 30000)` with `rstanarm`, `flexbayes` would tell us that it couldn't satisfy our belief. We could instead specify `belief(mean = 30000)`, which `rstanarm` can accommodate using an exponential distribution. But remember, the mean and mode are not the same thing! So which backend we choose can affect which beliefs we're able to express.
 
 Now, at this point, if you're anything like me, you're deeply skeptical
 of your own priors. Like...what if my priors make no sense whatsoever?
@@ -638,8 +735,9 @@ parameters in one chain:
 Compare expected-score uncertainty at the same predictor values. The
 additional beliefs narrow it here. Individual-observation intervals need
 not shrink by as much: they still include residual variation. `sigma`
-has exactly the same backend-default prior in both checks;
-use `update_priors("sigma", ...)` to elicit a different residual-scale prior.
+has exactly the same backend-default prior in both checks; use
+`update_priors("sigma", ...)` to elicit a different residual-scale
+prior.
 
 Keep revising when substantive knowledge justifies it. The check helps
 us discover implications we hadn't considered, without tuning priors to
@@ -740,7 +838,8 @@ This keeps the backend's exponential family and sets its rate to
 `1 / 30000`. It does not fix sigma at \$30,000, and \$30,000 is not the
 mean absolute error of individual sale prices.
 
-Now suppose we also assign 95% probability to sigma being below \$60,000:
+Now suppose we also assign 95% probability to sigma being below
+\$60,000:
 
 ```{r sigma-two-beliefs}
 sigma_priors = sigma_priors + update_priors(
@@ -749,26 +848,28 @@ sigma_priors = sigma_priors + update_priors(
 summary(sigma_priors)
 ```
 
-flexbayes checks both beliefs together. It prefers the default exponential
-when that family fits; otherwise it considers half-normal, half-Cauchy,
-and half-Student's t priors supported by rstanarm. Here the half-t fits,
-with both scale and degrees of freedom elicited. Its mean exists, but it
-has no finite SD: those are different properties. Add `diagnostics = TRUE` to
-the summary to inspect the original default and fitting details.
+flexbayes checks both beliefs together. It prefers the default
+exponential when that family fits; otherwise it considers half-normal,
+half-Cauchy, and half-Student's t priors supported by rstanarm. Here the
+half-t fits, with both scale and degrees of freedom elicited. Its mean
+exists, but it has no finite SD: those are different properties. Add
+`diagnostics = TRUE` to the summary to inspect the original default and
+fitting details.
 
 These supported families all peak at zero. They cannot represent a
 positive-mode belief such as `belief(mode = 30000)`; flexbayes reports
 that backend limitation rather than treating the mode as a mean.
 `check_prior()` samples the selected sigma for individual-outcome
 simulations. Expected-response predictions exclude that residual noise,
-and `update_outcome()` never adjusts sigma to meet expected-price beliefs.
+and `update_outcome()` never adjusts sigma to meet expected-price
+beliefs.
 
 ## Choosing a backend
 
-The same beliefs can go to either backend. `flexbayes` deliberately starts
-both with the same proper priors, derived from rstanarm 2.32.2. Choosing
-brms does **not** switch to native brms defaults, which include flat
-coefficient priors.
+The same beliefs can go to either backend. `flexbayes` deliberately
+starts both with the same proper priors, derived from rstanarm 2.32.2.
+Choosing brms does **not** switch to native brms defaults, which include
+flat coefficient priors.
 
 ```{r backend-choice}
 backend_priors = lapply(c("rstanarm", "brms"), function(backend) {
@@ -792,14 +893,15 @@ brms_sigma = identify_priors(
 summary(brms_sigma)
 ```
 
-We supplied a peak but no width. Here the Gamma prior keeps the universal
-exponential default's SD as an explicitly disclosed reference. Add another
-belief if that width doesn't reflect your knowledge. This is a prior for
-sigma itself, not for residual errors. With rstanarm, the supported sigma
-families all peak at zero, so the same positive-mode request retains a
-fallback instead. Whichever backend you choose, inspect the prior
-predictive implications before fitting. Fallbacks still require explicit
-`allow_fallback = TRUE` approval for export, fitting, or simulation.
+We supplied a peak but no width. Here the Gamma prior keeps the
+universal exponential default's SD as an explicitly disclosed reference.
+Add another belief if that width doesn't reflect your knowledge. This is
+a prior for sigma itself, not for residual errors. With rstanarm, the
+supported sigma families all peak at zero, so the same positive-mode
+request retains a fallback instead. Whichever backend you choose,
+inspect the prior predictive implications before fitting. Fallbacks
+still require explicit `allow_fallback = TRUE` approval for export,
+fitting, or simulation.
 
 ## Other ways to express your beliefs
 
@@ -835,8 +937,7 @@ See [`identify_priors()`](../html/identify_priors.html),
 objects](../html/update.flexbayes_priors.html),
 [`check_prior()`](../html/check_prior.html),
 [`as_rstanarm()`](../html/as_rstanarm.html),
-[`as_brms()`](../html/as_brms.html), and
-[`fit()`](../html/fit.html) for details. Logistic and Poisson models
-also support additional belief scales, including centered-intercept
-outcome beliefs and odds-ratio or rate-ratio beliefs for eligible
-slopes.
+[`as_brms()`](../html/as_brms.html), and [`fit()`](../html/fit.html) for
+details. Logistic and Poisson models also support additional belief
+scales, including centered-intercept outcome beliefs and odds-ratio or
+rate-ratio beliefs for eligible slopes.
