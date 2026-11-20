@@ -55,7 +55,7 @@ test_that("unsupported models fail clearly", {
   p = prior_example()
   expect_error(identify_priors(y ~ x, p$model$data, family = binomial("probit")), "Supported families")
   expect_error(identify_priors(y ~ x + I(2*x), p$model$data), "full-rank")
-  expect_error(update(p, parameter = "sigma", belief(mean = 2)), "not supported")
+  expect_equal(update(p, parameter = "sigma", belief(mean = 2))$selected$sigma$rate, .5)
   q = identify_priors(y ~ 0 + x, p$model$data)
   expect_equal(unname(q$model$reference), 0)
   expect_false("(Intercept)" %in% names(q$selected))

@@ -9,9 +9,10 @@
 #'   scale="original". Multiple specifications are reconciled jointly.
 #' @details Initially supports Gaussian identity models with an intercept,
 #' numeric predictors, and selected independent Normal coefficient priors.
-#' Student's t priors, categorical predictors, offsets and residual-scale
-#' elicitation are unsupported. The existing centered-intercept parameterization
-#' is retained; independence refers to that parameterization.
+#' Student's t coefficient priors, categorical predictors and offsets are
+#' unsupported. Sigma priors can be elicited separately with update_priors();
+#' expected-outcome reconciliation never adjusts sigma. The existing centered
+#' intercept is retained; independence refers to that parameterization.
 #'
 #' Reconciliation has three priorities: satisfy outcome beliefs within their
 #' tolerances; minimize the largest coefficient-belief violation beyond its
@@ -813,6 +814,14 @@ prior_joint_summary = function(x) {
   cat("Prior reconciliation:", status, "\n")
   prior_joint_summary_outcomes(object, ready)
   prior_joint_summary_coefficients(object, ready)
+  if (length(object$beliefs$sigma)) {
+    cat("\nResidual-scale prior:", prior_format(object$selected$sigma), "\n")
+    for (i in seq_along(object$beliefs$sigma)) {
+      prior_console_line(paste0("  ", i, ". ", object$beliefs$sigma[[i]]$label))
+    }
+    if (!is.null(object$candidates$sigma$message)) prior_console_line(object$candidates$sigma$message)
+    prior_scale_summary(object, x$diagnostics)
+  }
   if (!ready) {
     if (object$joint$status == "incompatible") prior_joint_summary_conflict(object)
     reason = if (object$joint$status == "unresolved")

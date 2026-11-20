@@ -8,7 +8,8 @@
 #' simulation rejects nonfinite rates or rates above 1e8.
 #' Reconciled outcome priors use the same simulation machinery. Use
 #' response='expected' to examine beliefs without individual residual noise;
-#' simulated outcomes additionally include the unchanged residual-scale prior.
+#' simulated outcomes additionally use the selected residual-scale prior.
+#' update_outcome() never changes sigma; update_priors() can elicit it separately.
 #' @param object A flexbayes_priors object.
 #' @param n Number of simulations.
 #' @param newdata Optional predictor data frame; no response is required.

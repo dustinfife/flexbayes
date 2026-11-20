@@ -4,7 +4,10 @@
 #'   data, family, contrasts, na.action, prior, prior_intercept, prior_aux,
 #'   QR and sparse. prior_aux is omitted for binomial/Poisson models, which
 #'   have no auxiliary parameter. All resolved priors disable autoscaling. The intercept
-#'   prior applies at the original model-matrix column means.
+#'   prior applies at the original model-matrix column means. Gaussian sigma
+#'   priors export as exponential, zero-centered normal, or zero-centered t
+#'   (df = 1 for half-Cauchy), with the backend's positive restriction and
+#'   autoscaling disabled.
 #' @export
 as_rstanarm = function(object) {
   prior_rstanarm_validate(object)
@@ -19,7 +22,7 @@ as_rstanarm = function(object) {
     na.action = stats::na.fail,
     prior = prior_rstanarm_coefficients(object$selected[slopes]),
     prior_intercept = if ("(Intercept)" %in% colnames(object$model$X)) prior_rstanarm_coefficients(object$selected["(Intercept)"]) else NULL,
-    prior_aux = if (prior_has_sigma(object)) rstanarm::exponential(rate = object$selected$sigma$rate, autoscale = FALSE) else NULL,
+    prior_aux = if (prior_has_sigma(object)) prior_rstanarm_auxiliary(object$selected$sigma) else NULL,
     QR = FALSE,
     sparse = FALSE
   )
@@ -40,7 +43,8 @@ prior_rstanarm_validate = function(object) {
 
   # Check compatibility across the complete collection of slope priors.
   blocked = names(Filter(function(c) identical(c$status, "backend_incompatible"), object$candidates))
-  if (length(blocked)) stop("Incompatible parameters: ", paste(blocked, collapse = ", "), ". rstanarm requires one slope prior family across the model.")
+  if (length(blocked)) stop("Incompatible parameters: ", paste(blocked, collapse = ", "),
+    ". rstanarm requires compatible prior_aux distributions and one slope prior family across the model.")
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
   selected = Filter(Negate(is.null), object$selected[slopes])
   families = unique(vapply(selected, `[[`, character(1), "distribution"))
@@ -59,7 +63,9 @@ prior_rstanarm_validate = function(object) {
       stop("Selected prior does not satisfy recorded beliefs for ", name, ".")
     }
   }
-  if (prior_has_sigma(object) && object$selected$sigma$distribution != "exponential") stop("Only exponential residual-scale priors can currently be exported faithfully.")
+  if (prior_has_sigma(object) && !object$selected$sigma$distribution %in% prior_scale_families()) {
+    stop("Unsupported residual-scale prior family for rstanarm prior_aux.")
+  }
   if (!identical(object$backend$QR, FALSE) || !identical(object$backend$sparse, FALSE)) stop("Export requires QR = FALSE and sparse = FALSE.")
 
   # Reject changed data instead of exporting priors with a new interpretation.
@@ -95,6 +101,18 @@ prior_rstanarm_coefficients = function(priors) {
 
 prior_rstanarm_fit = function(arguments) {
   do.call(rstanarm::stan_glm, arguments)
+}
+
+# continuous.stan in rstanarm 2.32.2 restricts aux_unscaled to positive values.
+# Zero location is essential: nonzero locations do not describe these halves.
+prior_rstanarm_auxiliary = function(prior) {
+  prior_validate_distribution(prior)
+  switch(prior$distribution,
+    exponential = rstanarm::exponential(rate = prior$rate, autoscale = FALSE),
+    half_normal = rstanarm::normal(location = 0, scale = prior$scale, autoscale = FALSE),
+    half_student_t = rstanarm::student_t(df = prior$df, location = 0, scale = prior$scale, autoscale = FALSE),
+    half_cauchy = rstanarm::cauchy(location = 0, scale = prior$scale, autoscale = FALSE),
+    stop("Unsupported residual-scale prior family for rstanarm prior_aux."))
 }
 
 # Effective defaults verified against stan_glm.fit in rstanarm 2.32.2.

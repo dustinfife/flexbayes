@@ -65,8 +65,7 @@
 #' More beliefs do not guarantee a fit. Contradictory statements are retained
 #' and reported, as are otherwise consistent statements that the supported
 #' families or backend cannot represent. A valid belief record does not by
-#' itself establish that a usable prior exists. Residual-scale (`sigma`)
-#' elicitation is not currently supported.
+#' itself establish that a usable prior exists.
 #'
 #' ## Matching an answer
 #'
@@ -90,7 +89,8 @@
 #' \describe{
 #'   \item{`"original"`}{The model's coefficient units: response units per
 #'   predictor unit for Gaussian slopes, log-odds for logistic coefficients,
-#'   and log-rates for Poisson coefficients. An intercept refers to the
+#'   and log-rates for Poisson coefficients. Gaussian `sigma` beliefs describe
+#'   the residual standard deviation in response units. An intercept refers to the
 #'   recorded model-matrix centering values when the model has an intercept.
 #'   For example, `belief(mode = 3)` can describe a Gaussian slope.
 #'   With `update_outcome()`, this same scale refers to expected-response
@@ -135,6 +135,39 @@
 #' moments or modes must exist for the candidate family. Not every combination
 #' can be represented; a single probability-scale mode can remain unresolved
 #' when the backend-default spread cannot support it as a unique global mode.
+#'
+#' ## Beliefs about residual standard deviation
+#'
+#' For Gaussian identity models, `update_priors("sigma", belief(mean = 30000))`
+#' describes the prior mean of sigma itself. It does not fix sigma at 30000 or
+#' describe a mean absolute residual. Use `sd` for uncertainty in sigma and a
+#' 50% probability statement for its median. Only `scale = "original"` is
+#' supported for sigma.
+#'
+#' Candidates are exponential, half-normal, half-Cauchy and half-Student's t,
+#' using the positive zero-centered families supported by rstanarm's `prior_aux`
+#' in version 2.32.2. All have mode zero; a mode outside the tolerance of zero
+#' is backend-incompatible. No positive mode is reinterpreted as a mean.
+#' Half-Cauchy has no finite mean or SD. Half-t mean requires df > 1 and SD
+#' requires df > 2. These limitations apply when evaluating beliefs as well
+#' as when displaying moments. A half-family scale is the underlying Normal
+#' or t scale, not the SD of sigma's prior.
+#'
+#' A single mean, SD, or informative probability belief keeps the default
+#' exponential family when compatible and determines its rate. With multiple
+#' beliefs, the scale acceptance bands are intersected. The half-t search fits
+#' scale and df separately from the coefficient t policy (fixed df = 7).
+#' Its deterministic numerical search uses df above 0, 1, or 2 according to
+#' requested moments, with an offset of at least `exp(-14)` and df at most
+#' `1e6`. Failure within that finite search is not a proof of infeasibility.
+#' All original belief tolerances must pass before a candidate is selected.
+#'
+#' Selection prefers a compatible exponential, then one-parameter half-normal
+#' and half-Cauchy candidates, then the two-parameter half-t. This tie-breaker
+#' does not establish uniqueness across families or within acceptance bands.
+#' Uninformative beliefs such as `mode = 0` retain the disclosed default scale.
+#' Diagnostics retain the original backend default. Expected-outcome
+#' reconciliation never changes an elicited or default sigma prior.
 #'
 #' ## Beliefs about expected outcomes
 #'
@@ -328,6 +361,10 @@ prior_fit_location_scale = function(records, reference, family = "normal") {
 prior_distribution_target = function(record, prior) {
   if (prior_outcome_scale(record$scale)) return(prior_outcome_target(record, prior))
   if (record$type != "probability") return(prior_distribution_operation(prior, record$type))
+  entry = prior_distribution_registry()[[prior$distribution]]
+  if (record$operator %in% c(">", ">=") && is.function(entry$survival)) {
+    return(prior_distribution_operation(prior, "survival", record$threshold))
+  }
   p = prior_distribution_operation(prior, "cdf", record$threshold)
   if (record$operator %in% c("<", "<=")) p else 1 - p
 }
@@ -344,10 +381,13 @@ prior_fit_normal = function(records, reference) prior_fit_location_scale(records
 update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
   # Validate additions and removals before changing the returned specification.
   if (length(parameter) != 1 || !parameter %in% names(object$beliefs)) stop("Unknown parameter.")
-  if (parameter == "sigma" && prior_has_sigma(object)) stop("Residual-scale elicitation is not supported yet; backend default retained.")
   prior_validate_standardized_beliefs(object)
   additions = list(...)
   if (any(!vapply(additions, inherits, logical(1), "prior_belief"))) stop("All additions must be belief objects.")
+  if (parameter == "sigma" && prior_has_sigma(object) &&
+      any(vapply(additions, function(r) r$scale != "original", logical(1)))) {
+    stop("Sigma beliefs require scale = 'original': they describe the residual standard deviation itself.")
+  }
   records = object$beliefs[[parameter]]
   if (!is.numeric(remove) ||
       anyNA(remove) ||
@@ -375,7 +415,8 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
   }
 
   # Mathematical contradictions take precedence over family fitting.
-  consistency = prior_check_probability_constraints(records)
+  consistency = if (parameter == "sigma" && prior_has_sigma(object))
+    prior_scale_consistency(records) else prior_check_probability_constraints(records)
   if (consistency$contradictory) {
     object$candidates[[parameter]] = list(valid = FALSE, status = "contradictory",
       conflicts = consistency$conflicts, message = consistency$message)

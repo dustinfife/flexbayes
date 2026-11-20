@@ -14,7 +14,10 @@ A named argument list for rstanarm::stan_glm, containing formula,
 data, family, contrasts, na.action, prior, prior_intercept, prior_aux,
 QR and sparse. prior_aux is omitted for binomial/Poisson models, which
 have no auxiliary parameter. All resolved priors disable autoscaling. The intercept
-prior applies at the original model-matrix column means.
+prior applies at the original model-matrix column means. Gaussian sigma
+priors export as exponential, zero-centered normal, or zero-centered t
+(df = 1 for half-Cauchy), with the backend's positive restriction and
+autoscaling disabled.
 }
 \description{
 Export a prior specification to rstanarm

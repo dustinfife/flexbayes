@@ -9,7 +9,18 @@ prior_distribution_registry = function() {
     student_t = list(density = prior_dt, cdf = prior_pt, quantile = prior_qt,
       random = prior_rt, support = c(-Inf, Inf), sd_factor = sqrt(prior_student_t_policy()$df / (prior_student_t_policy()$df - 2))),
     exponential = list(density = stats::dexp, cdf = stats::pexp,
-      quantile = stats::qexp, random = stats::rexp, support = c(0, Inf))
+      quantile = stats::qexp, random = stats::rexp, support = c(0, Inf),
+      survival = prior_exp_survival),
+    half_normal = list(density = prior_dhn, cdf = prior_phn,
+      survival = prior_shn, quantile = prior_qhn, random = prior_rhn,
+      mean = prior_hn_mean, sd = prior_hn_sd, mode = prior_zero_mode, support = c(0, Inf)),
+    half_student_t = list(density = prior_dht, cdf = prior_pht,
+      survival = prior_sht, quantile = prior_qht, random = prior_rht,
+      mean = prior_ht_mean, sd = prior_ht_sd, mode = prior_zero_mode, support = c(0, Inf)),
+    half_cauchy = list(density = prior_dhc, cdf = prior_phc,
+      survival = prior_shc, quantile = prior_qhc, random = prior_rhc,
+      mean = prior_undefined_moment, sd = prior_undefined_moment,
+      mode = prior_zero_mode, support = c(0, Inf))
   )
 }
 
@@ -23,7 +34,8 @@ prior_validate_distribution = function(prior) {
 
   # Check each family's parameters before calling its distribution functions.
   required = switch(prior$distribution, normal = c("mean", "sd"),
-    student_t = c("location", "scale", "df"), exponential = "rate", NULL)
+    student_t = c("location", "scale", "df"), exponential = "rate",
+    half_normal = "scale", half_student_t = c("scale", "df"), half_cauchy = "scale", NULL)
   if (is.null(required)) stop("Unsupported distribution.")
   for (name in required) {
     value = prior[[name]]
@@ -38,6 +50,7 @@ prior_distribution_operation = function(prior, operation, value = NULL) {
   prior_validate_distribution(prior)
   entry = prior_distribution_registry()[[prior$distribution]]
   if (operation == "support") return(entry$support)
+  if (operation %in% c("mean", "sd", "mode") && is.function(entry[[operation]])) return(entry[[operation]](prior))
   if (operation == "mode") return(switch(prior$distribution, normal = prior$mean, student_t = prior$location, exponential = 0))
   if (operation == "mean") {
     return(switch(

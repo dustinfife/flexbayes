@@ -92,8 +92,7 @@ reference choice and the achieved constraints.
 More beliefs do not guarantee a fit. Contradictory statements are retained
 and reported, as are otherwise consistent statements that the supported
 families or backend cannot represent. A valid belief record does not by
-itself establish that a usable prior exists. Residual-scale (\code{sigma})
-elicitation is not currently supported.
+itself establish that a usable prior exists.
 }
 
 \subsection{Matching an answer}{
@@ -119,7 +118,8 @@ their targets when changing units.
 \describe{
 \item{\code{"original"}}{The model's coefficient units: response units per
 predictor unit for Gaussian slopes, log-odds for logistic coefficients,
-and log-rates for Poisson coefficients. An intercept refers to the
+and log-rates for Poisson coefficients. Gaussian \code{sigma} beliefs describe
+the residual standard deviation in response units. An intercept refers to the
 recorded model-matrix centering values when the model has an intercept.
 For example, \code{belief(mode = 3)} can describe a Gaussian slope.
 With \code{update_outcome()}, this same scale refers to expected-response
@@ -162,6 +162,40 @@ distribution, not simply a transformation of a link-scale moment. Requested
 moments or modes must exist for the candidate family. Not every combination
 can be represented; a single probability-scale mode can remain unresolved
 when the backend-default spread cannot support it as a unique global mode.
+}
+
+\subsection{Beliefs about residual standard deviation}{
+
+For Gaussian identity models, \code{update_priors("sigma", belief(mean = 30000))}
+describes the prior mean of sigma itself. It does not fix sigma at 30000 or
+describe a mean absolute residual. Use \code{sd} for uncertainty in sigma and a
+50\% probability statement for its median. Only \code{scale = "original"} is
+supported for sigma.
+
+Candidates are exponential, half-normal, half-Cauchy and half-Student's t,
+using the positive zero-centered families supported by rstanarm's \code{prior_aux}
+in version 2.32.2. All have mode zero; a mode outside the tolerance of zero
+is backend-incompatible. No positive mode is reinterpreted as a mean.
+Half-Cauchy has no finite mean or SD. Half-t mean requires df > 1 and SD
+requires df > 2. These limitations apply when evaluating beliefs as well
+as when displaying moments. A half-family scale is the underlying Normal
+or t scale, not the SD of sigma's prior.
+
+A single mean, SD, or informative probability belief keeps the default
+exponential family when compatible and determines its rate. With multiple
+beliefs, the scale acceptance bands are intersected. The half-t search fits
+scale and df separately from the coefficient t policy (fixed df = 7).
+Its deterministic numerical search uses df above 0, 1, or 2 according to
+requested moments, with an offset of at least \code{exp(-14)} and df at most
+\code{1e6}. Failure within that finite search is not a proof of infeasibility.
+All original belief tolerances must pass before a candidate is selected.
+
+Selection prefers a compatible exponential, then one-parameter half-normal
+and half-Cauchy candidates, then the two-parameter half-t. This tie-breaker
+does not establish uniqueness across families or within acceptance bands.
+Uninformative beliefs such as \code{mode = 0} retain the disclosed default scale.
+Diagnostics retain the original backend default. Expected-outcome
+reconciliation never changes an elicited or default sigma prior.
 }
 
 \subsection{Beliefs about expected outcomes}{

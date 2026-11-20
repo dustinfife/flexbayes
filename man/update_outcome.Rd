@@ -24,9 +24,10 @@ object and coefficient belief statements are never modified in place.
 \details{
 Initially supports Gaussian identity models with an intercept,
 numeric predictors, and selected independent Normal coefficient priors.
-Student's t priors, categorical predictors, offsets and residual-scale
-elicitation are unsupported. The existing centered-intercept parameterization
-is retained; independence refers to that parameterization.
+Student's t coefficient priors, categorical predictors and offsets are
+unsupported. Sigma priors can be elicited separately with update_priors();
+expected-outcome reconciliation never adjusts sigma. The existing centered
+intercept is retained; independence refers to that parameterization.
 
 Reconciliation has three priorities: satisfy outcome beliefs within their
 tolerances; minimize the largest coefficient-belief violation beyond its

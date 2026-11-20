@@ -640,7 +640,7 @@ Compare expected-score uncertainty at the same predictor values. The
 additional beliefs narrow it here. Individual-observation intervals need
 not shrink by as much: they still include residual variation. `sigma`
 has exactly the same backend-default prior in both checks;
-residual-scale elicitation isn't yet supported.
+use `update_priors("sigma", ...)` to elicit a different residual-scale prior.
 
 Keep revising when substantive knowledge justifies it. The check helps
 us discover implications we hadn't considered, without tuning priors to
@@ -719,6 +719,50 @@ individual-outcome elicitation are not supported here. More general
 beliefs could require coefficient correlations that this initial method
 cannot represent. See the *Joint outcome elicitation: method and
 limitations* vignette for the optimization details.
+
+## Beliefs about residual variation
+
+Even houses with the same square footage, age, and bedroom count sell
+for different prices. In a Gaussian model, `sigma` describes that
+variation around the expected price. Its prior describes our uncertainty
+about **how much variation there is**.
+
+Suppose we believe sigma averages about \$30,000. Start with one belief:
+
+```{r sigma-mean}
+data(homes_2024)
+sigma_priors = identify_priors(
+  sale_price ~ sqft + age + bedrooms, data = homes_2024
+) + update_priors("sigma", belief(mean = 30000))
+print(sigma_priors)
+```
+
+This keeps the backend's exponential family and sets its rate to
+`1 / 30000`. It does not fix sigma at \$30,000, and \$30,000 is not the
+mean absolute error of individual sale prices.
+
+Now suppose we also assign 95% probability to sigma being below \$60,000:
+
+```{r sigma-two-beliefs}
+sigma_priors = sigma_priors + update_priors(
+  "sigma", belief(value < 60000, probability = .95)
+)
+summary(sigma_priors)
+```
+
+flexbayes checks both beliefs together. It prefers the default exponential
+when that family fits; otherwise it considers half-normal, half-Cauchy,
+and half-Student's t priors supported by rstanarm. Here the half-t fits,
+with both scale and degrees of freedom elicited. Its mean exists, but it
+has no finite SD: those are different properties. Add `diagnostics = TRUE` to
+the summary to inspect the original default and fitting details.
+
+These supported families all peak at zero. They cannot represent a
+positive-mode belief such as `belief(mode = 30000)`; flexbayes reports
+that backend limitation rather than treating the mode as a mean.
+`check_prior()` samples the selected sigma for individual-outcome
+simulations. Expected-response predictions exclude that residual noise,
+and `update_outcome()` never adjusts sigma to meet expected-price beliefs.
 
 ## Other ways to express your beliefs
 

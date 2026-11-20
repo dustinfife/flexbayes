@@ -1,4 +1,5 @@
 prior_fit_candidates = function(records, reference) {
+  if (reference$distribution == "exponential") return(prior_fit_scale_candidates(records, reference))
   # Fit each supported family against the complete collection of beliefs.
   families = c("normal", "student_t")
   boundary = any(vapply(records, function(r) r$type == "probability" && r$target %in% c(0, 1), logical(1)))

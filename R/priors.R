@@ -68,6 +68,9 @@ prior_format = function(prior) {
     normal = sprintf("Normal(%.2f, %.2f)", prior$mean, prior$sd),
     student_t = sprintf("t(df=%g, %.2f, %.2f)", prior$df, prior$location, prior$scale),
     exponential = sprintf("Exponential(%.3g)", prior$rate),
+    half_normal = sprintf("Half-Normal(0, %.3g)", prior$scale),
+    half_student_t = sprintf("Half-t(df=%.4g, 0, %.3g)", prior$df, prior$scale),
+    half_cauchy = sprintf("Half-Cauchy(0, %.3g)", prior$scale),
     "Unsupported"
   )
 }
@@ -156,13 +159,14 @@ print.summary.flexbayes_priors = function(x, ...) {
     }
     candidate = object$candidates[[name]]
     if (!is.null(candidate$message)) prior_console_line(paste0("Warning (", name, "): ", candidate$message))
+    if (name == "sigma" && prior_has_sigma(object)) prior_scale_summary(object, diagnostics)
     if (diagnostics && length(ratio_records)) prior_ratio_diagnostics(object, name)
     if (diagnostics && identical(candidate$status, "contradictory")) {
       cat("  Candidate fitting skipped: mathematical contradiction.\n")
     } else if (diagnostics) {
       cat(
         "  ",
-        if (identical(candidate$family, "student_t")) "Student's t" else "Normal",
+        prior_candidate_label(candidate$family),
         " candidate: ",
         if (isTRUE(candidate$valid)) "accepted" else "rejected",
         "\n",
@@ -269,7 +273,13 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
     for (label in names(distributions)) {
       p = distributions[[label]]
       grid = prior_distribution_operation(p, "quantile", seq(.001, .999, length.out = 501))
+      if (name == "sigma" && prior_has_sigma(x) && any(!is.finite(grid))) {
+        stop("Sigma prior density exceeds the numerical plotting range; no density points were silently removed.")
+      }
       density = prior_distribution_operation(p, "density", grid)
+      if (name == "sigma" && prior_has_sigma(x) && any(!is.finite(density))) {
+        stop("Sigma prior density exceeds the numerical plotting range; no density points were silently removed.")
+      }
       if (prior_outcome_scale(scale)) {
         outcome = if (scale == "probability") stats::plogis(grid) else exp(grid)
         jacobian = if (scale == "probability") outcome * (1 - outcome) else outcome
