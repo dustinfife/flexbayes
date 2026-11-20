@@ -106,7 +106,7 @@ test_that("ratio contradictions and t-only compatibility remain distinct", {
   q = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < exp(1), probability = pt(1, 7), scale = "odds_ratio"))
   expect_identical(q$candidates$x$status, "backend_incompatible")
   expect_equal(q$candidates$x$alternatives$student_t$distribution$df, 7)
-  expect_error(as_rstanarm(q), "Incompatible")
+  expect_error(as_rstanarm(q), "backend_incompatible.*allow_fallback")
 })
 
 test_that("ratio plot range and retained-reference diagnostics are explicit", {

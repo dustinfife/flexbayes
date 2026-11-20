@@ -75,7 +75,7 @@ test_that("GLM beliefs retain link scale and compatibility rules", {
     expect_error(plot(p, parameter = "x", scale = "standardized"), "Gaussian-style")
     t = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
     expect_identical(t$candidates$x$status, "backend_incompatible")
-    expect_error(as_rstanarm(t), "Incompatible parameters")
+    expect_error(as_rstanarm(t), "backend_incompatible.*allow_fallback")
     t = update(t, parameter = "gb", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
     expect_equal(t$selected$x$distribution, "student_t")
     expect_equal(as_rstanarm(t)$prior$dist, "t")

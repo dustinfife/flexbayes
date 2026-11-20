@@ -409,7 +409,6 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
   }
   object$beliefs[[parameter]] = records
   if (!length(records)) {
-    object$selected[parameter] = list(object$defaults[[parameter]])
     object$candidates[parameter] = list(list())
     return(prior_select_compatible(object))
   }
@@ -420,12 +419,12 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
   if (consistency$contradictory) {
     object$candidates[[parameter]] = list(valid = FALSE, status = "contradictory",
       conflicts = consistency$conflicts, message = consistency$message)
-    object$selected[parameter] = list(NULL)
     return(prior_select_compatible(object))
   }
 
-  result = prior_fit_candidates(records, object$defaults[[parameter]])
+  result = tryCatch(prior_fit_candidates(records, object$defaults[[parameter]]), error = function(error)
+    list(valid = FALSE, status = "no_supported_fit", alternatives = list(),
+      message = paste("Numerical elicitation failed; mathematical incompatibility was not established.", conditionMessage(error))))
   object$candidates[[parameter]] = result
-  object$selected[parameter] = list(NULL)
   prior_select_compatible(object)
 }

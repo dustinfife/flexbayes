@@ -27,6 +27,8 @@ A ggplot object.
 \code{parameter} to compare acceptable candidates for one coefficient, such as
 \code{plot(priors, parameter = "x")}. These are parameter densities; to examine
 their implications for outcomes and relationships, plot a \code{check_prior()} result.
+After unsuccessful elicitation, plots show the retained prior with a fallback
+annotation, rather than displaying an unselected candidate as the current prior.
 }
 \examples{
 \dontrun{

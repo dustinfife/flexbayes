@@ -24,12 +24,12 @@ test_that("infeasible or competing global modes remain unresolved", {
   for (target in c(.5, .7, .95, .05)) {
     p = single_mode_example()
     q = update(p, parameter = "(Intercept)", belief(mode = target, scale = "probability"))
-    expect_null(q$selected$`(Intercept)`)
+    expect_identical(q$selected$`(Intercept)`, p$defaults$`(Intercept)`)
     expect_identical(q$candidates$`(Intercept)`$status, "no_supported_fit")
     expect_match(q$candidates$`(Intercept)`$message, "Add an SD or informative quantile")
     expect_false(q$candidates$`(Intercept)`$alternatives$normal$reference_used)
     output = capture.output(print(q))
-    expect_true(any(grepl("Unresolved", output)))
+    expect_true(any(grepl("fallback", output)))
     expect_false(any(grepl("Elicited", output)))
   }
   expect_error(prior_logit_normal_mode(0, 2.5), "multiple global modes")

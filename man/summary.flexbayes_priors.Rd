@@ -26,6 +26,8 @@ changed coefficient priors and their compromised beliefs. Before means the
 original distribution or requested belief value; After means the adjusted
 distribution or achieved value. Normal is abbreviated to N only in this table.
 Unchanged priors and satisfied beliefs are omitted from the comparison.
+Failed elicitation is labeled as a fallback, with its retained prior's origin
+and the reason the current beliefs were not verified.
 Unverified reconciliations are clearly flagged. Complete comparisons,
 backend-centering references and optimization statistics require diagnostics=TRUE.
 }

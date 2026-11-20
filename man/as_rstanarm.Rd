@@ -4,10 +4,15 @@
 \alias{as_rstanarm}
 \title{Export a prior specification to rstanarm}
 \usage{
-as_rstanarm(object)
+as_rstanarm(object, allow_fallback = FALSE)
 }
 \arguments{
 \item{object}{A flexbayes_priors object.}
+
+\item{allow_fallback}{Use retained priors despite unsuccessful elicitation?
+Defaults to FALSE. TRUE explicitly approves their use and issues a warning;
+current beliefs remain recorded and are not treated as satisfied. Model-data
+validation and backend restrictions still apply.}
 }
 \value{
 A named argument list for rstanarm::stan_glm, containing formula,

@@ -40,7 +40,7 @@ test_that("two-house uncertainty ratio conflict is proved using the centered des
   expect_length(bad$outcomes,2)
   expect_identical(bad$outcomes[[1]],first$outcomes[[1]])
   expect_equal(vapply(bad$outcomes[[2]]$beliefs,`[[`,numeric(1),"target"),c(500000,.05))
-  expect_identical(bad$selected,p$selected)
+  expect_identical(bad$selected,first$selected)
   expect_null(bad$joint$stages)
   reference = mean(p$model$data$sqft)
   expect_equal(reference,2014.94)

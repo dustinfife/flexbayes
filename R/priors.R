@@ -9,6 +9,12 @@
 #' @param data Data frame.
 #' @param family Gaussian identity, binomial logit or Poisson log family.
 #' @param package Backend name.
+#' @details Unsuccessful updates preserve all beliefs and retain the last valid
+#' prior, or the original backend default. Summary and plots show that retained
+#' prior with a fallback label; they do not imply that current beliefs were met.
+#' Failed outcome reconciliation retains the previous coherent coefficient-prior
+#' collection. Export, fitting and simulation require explicit approval through
+#' allow_fallback = TRUE before using these priors.
 #' @return A flexbayes_priors object.
 #' @export
 identify_priors = function(formula, data, family = stats::gaussian(), package = "rstanarm") {
@@ -58,7 +64,7 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
 
   out$model$standardization = prior_standardization_metadata(out$model)
   class(out) = "flexbayes_priors"
-  out
+  prior_retention_initialize(out)
 }
 
 prior_format = function(prior) {
@@ -83,6 +89,8 @@ prior_console_line = function(text) {
 print.flexbayes_priors = function(x, ...) {
   cat("Priors (", x$backend$package, " ", x$backend$version, ")\n", sep = "")
   source = vapply(names(x$selected), function(name) {
+    if (!is.null(x$fallbacks[[name]])) return(if (x$fallbacks[[name]]$source == "backend_default")
+      "Backend default (fallback)" else "Previous elicited (fallback)")
     if (identical(x$candidates[[name]]$status, "contradictory")) return("Contradictory")
     if (identical(x$candidates[[name]]$status, "backend_incompatible")) return("Incompatible")
     if (is.null(x$selected[[name]])) return("Unresolved")
@@ -99,6 +107,7 @@ print.flexbayes_priors = function(x, ...) {
     Source = unname(source), Beliefs = lengths(x$beliefs), row.names = NULL)
   print(table, row.names = FALSE, right = FALSE)
   if (any(source == "Elicited*")) prior_console_line("* Backend default used to resolve underdetermined beliefs.")
+  if (length(prior_fallback_issues(x))) prior_console_line("Fallback priors are available for inspection; current elicitation was unsuccessful. See summary() before using allow_fallback = TRUE.")
   if (!is.null(x$joint)) cat("Outcome reconciliation:", x$joint$status, ";", length(x$outcomes), "configuration(s).\n")
   invisible(x)
 }
@@ -111,6 +120,8 @@ print.flexbayes_priors = function(x, ...) {
 #' original distribution or requested belief value; After means the adjusted
 #' distribution or achieved value. Normal is abbreviated to N only in this table.
 #' Unchanged priors and satisfied beliefs are omitted from the comparison.
+#' Failed elicitation is labeled as a fallback, with its retained prior's origin
+#' and the reason the current beliefs were not verified.
 #' Unverified reconciliations are clearly flagged. Complete comparisons,
 #' backend-centering references and optimization statistics require diagnostics=TRUE.
 #' @param object A prior specification.
@@ -134,7 +145,7 @@ print.summary.flexbayes_priors = function(x, ...) {
   print(object)
   for (name in names(object$beliefs)) {
     records = object$beliefs[[name]]
-    if (!length(records)) next
+    if (!length(records) && is.null(object$fallbacks[[name]])) next
     cat("\nBeliefs for ", name, ":\n", sep = "")
     for (i in seq_along(records)) prior_console_line(paste0("  ", i, ". ", records[[i]]$label))
     if (diagnostics) {
@@ -158,7 +169,9 @@ print.summary.flexbayes_priors = function(x, ...) {
       prior_console_line("Outcome-scale beliefs describe the expected outcome at the model-matrix centering reference, not individual observed outcomes.")
     }
     candidate = object$candidates[[name]]
-    if (!is.null(candidate$message)) prior_console_line(paste0("Warning (", name, "): ", candidate$message))
+    retained = !is.null(object$fallbacks[[name]])
+    if (retained) prior_fallback_summary(object, name, diagnostics) else
+      if (!is.null(candidate$message)) prior_console_line(paste0("Warning (", name, "): ", candidate$message))
     if (name == "sigma" && prior_has_sigma(object)) prior_scale_summary(object, diagnostics)
     if (diagnostics && length(ratio_records)) prior_ratio_diagnostics(object, name)
     if (diagnostics && identical(candidate$status, "contradictory")) {
@@ -168,7 +181,7 @@ print.summary.flexbayes_priors = function(x, ...) {
         "  ",
         prior_candidate_label(candidate$family),
         " candidate: ",
-        if (isTRUE(candidate$valid)) "accepted" else "rejected",
+        if (retained) "not selected (fallback retained)" else if (isTRUE(candidate$valid)) "accepted" else "rejected",
         "\n",
         sep = ""
       )
@@ -225,6 +238,8 @@ print.summary.flexbayes_priors = function(x, ...) {
 #' `parameter` to compare acceptable candidates for one coefficient, such as
 #' `plot(priors, parameter = "x")`. These are parameter densities; to examine
 #' their implications for outcomes and relationships, plot a `check_prior()` result.
+#' After unsuccessful elicitation, plots show the retained prior with a fallback
+#' annotation, rather than displaying an unselected candidate as the current prior.
 #' @param x Prior specification.
 #' @param parameter Optional parameter name. When supplied, compare acceptable candidates.
 #' @param scale Plot in original, standardized, probability, response, odds_ratio
@@ -263,7 +278,7 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
   rows = list()
   for (name in names) {
     distributions = list(Selected = x$selected[[name]])
-    if (!is.null(parameter)) {
+    if (!is.null(parameter) && is.null(x$fallbacks[[name]])) {
       alternatives = Filter(function(c) isTRUE(c$valid), x$candidates[[name]]$alternatives)
       distributions = lapply(alternatives, `[[`, "distribution")
       if (!length(distributions)) distributions = list(Selected = x$selected[[name]])
@@ -293,7 +308,7 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
       }
       selected = identical(p, x$selected[[name]])
       rows[[length(rows) + 1L]] = data.frame(value = grid / factor, density = density * factor, parameter = name,
-        Candidate = paste0(label, if (selected) " (selected)" else " (mathematical only)"))
+        Candidate = paste0(label, if (!is.null(x$fallbacks[[name]]) && selected) " (retained fallback)" else if (selected) " (selected)" else " (mathematical only)"))
     }
   }
   result = ggplot2::ggplot(do.call(rbind, rows), ggplot2::aes(x = value, y = density, colour = Candidate)) + ggplot2::geom_line() + ggplot2::facet_wrap(~parameter, scales = "free") + ggplot2::labs(
@@ -301,5 +316,7 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
     y = "Prior density"
   )
   if (prior_ratio_scale(scale)) result = result + ggplot2::scale_x_log10()
+  retained = intersect(names, prior_fallback_names(x))
+  if (length(retained)) result = result + ggplot2::labs(subtitle = paste("Retained fallback:", paste(retained, collapse = ", "), "- current beliefs not verified"))
   result
 }

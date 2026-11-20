@@ -4,7 +4,7 @@
 \alias{check_prior}
 \title{Simulate prior predictive responses}
 \usage{
-check_prior(object, n = 1000, newdata = NULL)
+check_prior(object, n = 1000, newdata = NULL, allow_fallback = FALSE)
 }
 \arguments{
 \item{object}{A flexbayes_priors object.}
@@ -12,6 +12,11 @@ check_prior(object, n = 1000, newdata = NULL)
 \item{n}{Number of simulations.}
 
 \item{newdata}{Optional predictor data frame; no response is required.}
+
+\item{allow_fallback}{Use retained priors despite unsuccessful elicitation?
+Defaults to FALSE. TRUE explicitly approves their use and issues a warning;
+current beliefs remain recorded and are not treated as satisfied. Model-data
+validation and backend restrictions still apply.}
 }
 \value{
 A flexbayes_prior_predictive object with draws-by-observations

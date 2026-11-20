@@ -269,38 +269,37 @@ priors = priors + update_priors(
 summary(priors)
 ```
 
-Uh oh. Notice that the "Source" column indicates that our priors for `x`
-are "Contradictory." That makes sense; we told the computer there's a
-95% probability values are less then zero, while also telling the
-computer there's a 95% probability values are greater than one. Those
-regions don't overlap. We're trying to allocate 1.90 worth of
-probability when there's only one to allocate.
+Uh oh. We told the computer there is a 95% probability values are less
+than zero and a 95% probability values are greater than one. Those regions
+don't overlap. We're allocating 1.90 worth of probability when there's
+only one to allocate. A different distribution won't rescue that.
 
-A different distribution won't rescue that. flexbayes keeps the beliefs
-visible and marks the contradiction instead of reverting to a default.
-We need to reconsider the statements. Fortunately, it's easy to remove a
-belief:
+flexbayes keeps these beliefs and reports the contradiction. The Source
+column now identifies the **previous elicited prior (fallback)**. That
+prior is still available to inspect, but it has not satisfied our new
+beliefs. If we had not successfully elicited a prior yet, flexbayes would
+retain the original backend default instead.
+
+Fortunately, it's easy to remove the contradictory statements:
 
 ```{r repair}
 priors = update(priors, parameter = "x", remove = c(4, 5))
 priors
 ```
 
-Now the Source column has reverted to saying "Elicited" instead of
-"Contradictory."
+The remaining beliefs fit again, so Source returns to "Elicited."
+Other failures have different explanations: a supported family might not
+fit otherwise consistent beliefs, backend restrictions might block a
+candidate, or a numerical search might fail. A failed numerical search
+isn't proof that the beliefs are mathematically impossible.
+Use `summary(priors, diagnostics = TRUE)` to investigate.
 
-There are other failures we might encounter in the source column:
-
-- **Incompatible:** this means that valid candidate distributions do
-  exist, but they have backend restrictions. The `rstanarm` package
-  places certain restrictions on priors (e.g., they must come from the
-  same distribution family). When the elicited priors violate these
-  restrictions, it will display "Incompatible."
-- **Unresolved:** This means that the computer couldn't find a
-  distribution that fit your requirements.
-
-To investigate problems, you can type
-`summary(priors, diagnostics = TRUE)` for more information.
+Retaining a prior doesn't mean approving its use. `as_rstanarm()`,
+`fit()` and `check_prior()` stop when elicitation has failed. To use the
+retained priors deliberately, pass `allow_fallback = TRUE`; you'll get
+a warning, and the unmet beliefs stay in the object. Removing or replacing
+the troublesome beliefs lets flexbayes try again. Failed outcome
+reconciliation likewise retains the previous coherent coefficient priors.
 
 ## Specifying Priors Based on the Outcome
 

@@ -1,5 +1,9 @@
 #' Export a prior specification to rstanarm
 #' @param object A flexbayes_priors object.
+#' @param allow_fallback Use retained priors despite unsuccessful elicitation?
+#'   Defaults to FALSE. TRUE explicitly approves their use and issues a warning;
+#'   current beliefs remain recorded and are not treated as satisfied. Model-data
+#'   validation and backend restrictions still apply.
 #' @return A named argument list for rstanarm::stan_glm, containing formula,
 #'   data, family, contrasts, na.action, prior, prior_intercept, prior_aux,
 #'   QR and sparse. prior_aux is omitted for binomial/Poisson models, which
@@ -9,8 +13,8 @@
 #'   (df = 1 for half-Cauchy), with the backend's positive restriction and
 #'   autoscaling disabled.
 #' @export
-as_rstanarm = function(object) {
-  prior_rstanarm_validate(object)
+as_rstanarm = function(object, allow_fallback = FALSE) {
+  prior_rstanarm_validate(object, allow_fallback)
 
   # Export resolved priors without asking the backend to rescale them.
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
@@ -33,8 +37,9 @@ as_rstanarm = function(object) {
   arguments
 }
 
-prior_rstanarm_validate = function(object) {
+prior_rstanarm_validate = function(object, allow_fallback = FALSE) {
   if (!inherits(object, "flexbayes_priors")) stop("Supply a flexbayes_priors object.")
+  prior_fallback_permission(object, allow_fallback)
   if (object$backend$package != "rstanarm") stop("Only rstanarm export is supported.")
   if (!requireNamespace("rstanarm", quietly = TRUE)) stop("Install rstanarm to export priors.")
   version = as.character(utils::packageVersion("rstanarm"))
@@ -43,16 +48,17 @@ prior_rstanarm_validate = function(object) {
 
   # Check compatibility across the complete collection of slope priors.
   blocked = names(Filter(function(c) identical(c$status, "backend_incompatible"), object$candidates))
-  if (length(blocked)) stop("Incompatible parameters: ", paste(blocked, collapse = ", "),
+  if (length(blocked) && !allow_fallback && !length(prior_fallback_issues(object))) stop("Incompatible parameters: ", paste(blocked, collapse = ", "),
     ". rstanarm requires compatible prior_aux distributions and one slope prior family across the model.")
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
   selected = Filter(Negate(is.null), object$selected[slopes])
   families = unique(vapply(selected, `[[`, character(1), "distribution"))
   if (length(families) > 1L) stop("Incompatible coefficient families: ", paste(names(selected), collapse = ", "), ". rstanarm requires one slope prior family.")
-  prior_predictive_validate(object)
+  prior_predictive_validate(object, allow_fallback)
   for (name in names(object$beliefs)) {
     records = object$beliefs[[name]]
     if (!length(records)) next
+    if (allow_fallback && !is.null(object$fallbacks[[name]])) next
     achieved = vapply(records, prior_distribution_target, numeric(1), prior = object$selected[[name]])
     targets = vapply(records, `[[`, numeric(1), "target")
     tolerances = vapply(records, `[[`, numeric(1), "tolerance")

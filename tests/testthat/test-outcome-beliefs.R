@@ -31,7 +31,7 @@ test_that("outcome quantiles mix with link beliefs and boundaries", {
   q = update(outcome_example(), parameter = "(Intercept)", belief(value <= 1, probability = 1, scale = "probability"))
   expect_equal(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
   q = update(outcome_example(), parameter = "(Intercept)", belief(value < .5, probability = 0, scale = "probability"))
-  expect_null(q$selected$`(Intercept)`)
+  expect_identical(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
   p = outcome_example(poisson())
   p = update(p, parameter = "(Intercept)", belief(mean = log(3)), belief(value <= 6, probability = .95, scale = "response"))
   expect_equal(p$selected$`(Intercept)`$sd, log(2) / qnorm(.95), tolerance = 1e-8)
@@ -96,7 +96,7 @@ test_that("outcome domains, unsupported modes and removal are explicit", {
   expect_error(update(p, parameter = "(Intercept)", belief(value < -1, probability = .5, scale = "probability")), "in ")
   expect_error(update(p, parameter = "(Intercept)", belief(mean = 3, scale = "response")), "family")
   q = update(p, parameter = "(Intercept)", belief(mode = .7, scale = "probability"))
-  expect_null(q$selected$`(Intercept)`)
+  expect_identical(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
   expect_match(q$candidates$`(Intercept)`$message, "Add an SD or informative quantile")
   expect_match(q$candidates$`(Intercept)`$alternatives$student_t$message, "global mode")
   q = update(q, parameter = "(Intercept)", remove = 1)
@@ -105,7 +105,7 @@ test_that("outcome domains, unsupported modes and removal are explicit", {
   expect_error(update(p, parameter = "(Intercept)", belief(mean = 0, scale = "response")), "positive")
   expect_error(update(p, parameter = "(Intercept)", belief(value < -1, probability = .5, scale = "response")), "positive")
   q = update(outcome_example(), parameter = "(Intercept)", belief(mean = .7, scale = "probability", tolerance = 1e-10))
-  expect_null(q$selected$`(Intercept)`)
+  expect_identical(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
   expect_match(q$candidates$`(Intercept)`$message, "numerical evaluation")
 })
 
@@ -121,7 +121,7 @@ test_that("redundant outcome beliefs preserve reference anchoring and diagnostic
 test_that("general nonlinear rank deficiency remains explicit", {
   p = outcome_example()
   p = update(p, parameter = "(Intercept)", belief(mean = 0), belief(mean = .5, scale = "probability"))
-  expect_null(p$selected$`(Intercept)`)
+  expect_identical(p$selected$`(Intercept)`, p$defaults$`(Intercept)`)
   expect_match(p$candidates$`(Intercept)`$message, "Underidentified nonlinear")
 })
 

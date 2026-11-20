@@ -31,65 +31,60 @@ prior_fit_candidates = function(records, reference) {
 
 # Recompute automatic selections without refitting or changing candidate ranks.
 # Defaults are fixed; elicited candidates are automatic choices, not user locks.
-prior_select_compatible = function(object) {
-  # Keep default priors fixed while collecting the elicited alternatives.
-  slopes = setdiff(colnames(object$model$X), "(Intercept)")
+prior_choose_candidates = function(object) {
   options = lapply(names(object$selected), function(name) {
-    if (!length(object$beliefs[[name]])) {
-      return(list(list(valid = TRUE,
-        family = object$defaults[[name]]$distribution, distribution = object$defaults[[name]], rank = 0L)))
-    }
+    if (!length(object$beliefs[[name]])) return(list(list(valid = TRUE,
+      family = object$defaults[[name]]$distribution, distribution = object$defaults[[name]], rank = 0L)))
     Filter(function(c) isTRUE(c$valid), object$candidates[[name]]$alternatives)
   })
   names(options) = names(object$selected)
-  fixed = slopes[lengths(object$beliefs[slopes]) == 0L]
-  fixed_families = unique(vapply(object$defaults[fixed], `[[`, character(1), "distribution"))
-  families = if (length(fixed_families)) fixed_families else c("normal", "student_t")
-
-  # Prefer a complete combination; otherwise retain the largest compatible
-  # subset. Sum of mathematical ranks breaks ties, then registry family order.
-
+  slopes = setdiff(colnames(object$model$X), "(Intercept)")
+  families = c("normal", "student_t")
   coverage = cost = numeric(length(families))
+  feasible = rep(TRUE, length(families))
+
+  # A family must accommodate every actual prior, including retained fallbacks.
   for (i in seq_along(families)) {
     for (name in slopes) {
-      compatible = Filter(function(c) c$family == families[i], options[[name]])
-      if (length(compatible)) {
+      eligible = Filter(function(c) c$family == families[i], options[[name]])
+      if (length(eligible)) {
         coverage[i] = coverage[i] + 1L
-        cost[i] = cost[i] + compatible[[1]]$rank
-      }
+        cost[i] = cost[i] + eligible[[1]]$rank
+      } else if (object$last_valid[[name]]$distribution != families[i]) feasible[i] = FALSE
     }
   }
+  available = which(feasible)
+  if (!length(available)) stop("No coherent retained slope-prior collection is available; identify priors again.")
+  family = families[available[order(-coverage[available], cost[available])[1]]]
+  object$fallbacks = list()
 
-  family = if (length(families)) families[order(-coverage, cost)[1]] else NULL
   for (name in names(options)) {
-    if (!length(object$beliefs[[name]])) {
-      object$selected[name] = list(object$defaults[[name]])
-      next
-    }
     result = object$candidates[[name]]
     eligible = options[[name]]
-    if (name %in% slopes) eligible = Filter(function(c) identical(c$family, family), eligible)
-    object$selected[name] = list(NULL)
+    if (name %in% slopes) eligible = Filter(function(c) c$family == family, eligible)
     if (length(eligible)) {
       chosen = eligible[[which.min(vapply(eligible, `[[`, numeric(1), "rank"))]]
-
-      # Remove diagnostics left over from a previous automatic selection.
+      object$selected[name] = list(chosen$distribution)
+      if (!length(object$beliefs[[name]])) {
+        object$candidates[[name]] = list()
+        next
+      }
       fields = c("family", "distribution", "achieved", "residuals", "score", "rank", "reference_used", "numerical", "convergence")
       result[fields] = lapply(fields, function(field) chosen[[field]])
       result$valid = TRUE
       result$status = "selected"
       result$message = NULL
-      object$selected[name] = list(chosen$distribution)
-    } else if (length(options[[name]])) {
-      result$status = "backend_incompatible"
-      result$message = "Valid mathematical candidates exist, but rstanarm requires one slope prior family. Backend defaults were preserved."
+    } else {
+      if (length(options[[name]])) {
+        result$status = "backend_incompatible"
+        result$message = "Valid mathematical candidates exist, but rstanarm requires one slope prior family. A previous compatible prior has been retained."
+      }
+      if (is.null(result$status)) result$status = "no_supported_fit"
+      object$selected[name] = list(object$last_valid[[name]])
+      object$fallbacks[[name]] = prior_fallback_record(object, name, result$status, result$message)
     }
     object$candidates[[name]] = result
   }
-
-  # Revisit the whole model, including any retained outcome specifications.
-  object$backend$compatible = all(vapply(object$selected, Negate(is.null), logical(1))) &&
-    length(unique(vapply(Filter(Negate(is.null), object$selected[slopes]), `[[`, character(1), "distribution"))) <= 1L
-  if (length(object$outcomes)) return(prior_joint_reconcile(object))
+  object$backend$compatible = prior_available_compatible(object)
   object
 }

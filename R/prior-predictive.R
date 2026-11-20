@@ -11,6 +11,10 @@
 #' simulated outcomes additionally use the selected residual-scale prior.
 #' update_outcome() never changes sigma; update_priors() can elicit it separately.
 #' @param object A flexbayes_priors object.
+#' @param allow_fallback Use retained priors despite unsuccessful elicitation?
+#'   Defaults to FALSE. TRUE explicitly approves their use and issues a warning;
+#'   current beliefs remain recorded and are not treated as satisfied. Model-data
+#'   validation and backend restrictions still apply.
 #' @param n Number of simulations.
 #' @param newdata Optional predictor data frame; no response is required.
 #' @return A flexbayes_prior_predictive object with draws-by-observations
@@ -18,11 +22,11 @@
 #'   the linear_predictor and prediction design matrix, and metadata retaining
 #'   prediction data, frozen model terms, factor levels and contrasts for plotting.
 #' @export
-check_prior = function(object, n = 1000, newdata = NULL) {
+check_prior = function(object, n = 1000, newdata = NULL, allow_fallback = FALSE) {
   if (!inherits(object, "flexbayes_priors")) stop("Supply a flexbayes_priors object.")
   if (!is.numeric(n) || length(n) != 1L || !is.finite(n) || n < 1 || n != floor(n) || n > .Machine$integer.max) stop("n must be a positive integer.")
   prior_validate_family(object$model$family)
-  prior_predictive_validate(object)
+  prior_predictive_validate(object, allow_fallback)
 
   # Sample the selected priors once, keeping joint draw identities intact.
   X = prior_prediction_matrix(object, newdata)
@@ -62,17 +66,22 @@ check_prior = function(object, n = 1000, newdata = NULL) {
       default_scaling = prior_default_description(object))
   )
   class(result) = "flexbayes_prior_predictive"
+  if (length(prior_fallback_issues(object))) result$metadata$fallback = list(
+    approved = allow_fallback, parameters = object$fallbacks, outcome_status = object$joint$status)
   result
 }
 
-prior_predictive_validate = function(object) {
-  prior_joint_validate(object)
+prior_predictive_validate = function(object, allow_fallback = FALSE) {
+  issues = prior_fallback_permission(object, allow_fallback)
+  if (length(issues)) prior_validate_retained(object)
+  if (!isTRUE(object$joint$retained)) prior_joint_validate(object)
   prior_validate_standardized_beliefs(object)
   required = prior_required_parameters(object)
   if (!all(required %in% names(object$selected))) stop("Required prior is missing.")
   for (name in required) {
     status = object$candidates[[name]]$status
-    if (!is.null(status) && status %in% c("contradictory", "backend_incompatible", "no_supported_fit")) stop("Cannot sample prior for ", name, ": ", status, ".")
+    if (!is.null(status) && status %in% c("contradictory", "backend_incompatible", "no_supported_fit") &&
+        !(allow_fallback && !is.null(object$fallbacks[[name]]))) stop("Cannot sample prior for ", name, ": ", status, ".")
     prior = object$selected[[name]]
     if (is.null(prior)) stop("No selected prior for ", name, ".")
     tryCatch(prior_validate_distribution(prior), error = function(error) {
@@ -87,6 +96,7 @@ prior_predictive_validate = function(object) {
   if (!isTRUE(object$backend$compatible) || length(families) > 1L) stop("Prior specification is incompatible with the backend.")
   if ("(Intercept)" %in% required && !object$selected$`(Intercept)`$distribution %in% c("normal", "student_t")) stop("Unsupported backend intercept prior.")
   if (object$backend$package != "rstanarm" || any(!families %in% c("normal", "student_t"))) stop("Unsupported backend prior specification.")
+  if (length(issues)) prior_warn_fallback(object)
   invisible(object)
 }
 

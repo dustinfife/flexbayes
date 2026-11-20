@@ -81,7 +81,7 @@ test_that("invalid selections and changed models cannot export", {
   q = update(p, parameter = "x", belief(value < 0, probability = 0))
   expect_error(as_rstanarm(q), "no_supported_fit")
   q = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
-  expect_error(as_rstanarm(q), "Incompatible parameters: x.*one slope prior family")
+  expect_error(as_rstanarm(q), "x.*backend_incompatible.*allow_fallback")
   q = p
   q$model$data$x = q$model$data$x + 1
   expect_error(as_rstanarm(q), "changed since")

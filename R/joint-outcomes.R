@@ -814,6 +814,10 @@ prior_joint_summary = function(x) {
   cat("Prior reconciliation:", status, "\n")
   prior_joint_summary_outcomes(object, ready)
   prior_joint_summary_coefficients(object, ready)
+  if (isTRUE(object$joint$retained)) {
+    cat("\nAvailable priors (retained; outcome beliefs not reconciled):\n")
+    print(object)
+  }
   if (length(object$beliefs$sigma)) {
     cat("\nResidual-scale prior:", prior_format(object$selected$sigma), "\n")
     for (i in seq_along(object$beliefs$sigma)) {
@@ -824,7 +828,7 @@ prior_joint_summary = function(x) {
   }
   if (!ready) {
     if (object$joint$status == "incompatible") prior_joint_summary_conflict(object)
-    reason = if (object$joint$status == "unresolved")
+    reason = if (identical(object$joint$attempted, FALSE)) object$joint$message else if (object$joint$status == "unresolved")
       "The solver could not verify a feasible prior; this does not prove your answers are impossible." else if (object$joint$status == "incompatible")
       "Review the conflicting answers or the model's restrictions before using these priors." else error
     prior_console_line(paste("Not ready to use:", reason))

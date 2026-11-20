@@ -1,5 +1,9 @@
 #' Fit a model using its selected priors
 #' @param object A prior specification.
+#' @param allow_fallback Use retained priors despite unsuccessful elicitation?
+#'   Defaults to FALSE. TRUE explicitly approves their use and issues a warning;
+#'   current beliefs remain recorded and are not treated as satisfied. Model-data
+#'   validation and backend restrictions still apply.
 #' @param ... Named backend sampling or algorithm arguments. Model and prior
 #'   arguments cannot be overridden. See details.
 #' @details Supported arguments are chains, iter, warmup, thin, seed, cores,
@@ -12,7 +16,7 @@ fit = function(object, ...) UseMethod("fit")
 
 #' @rdname fit
 #' @export
-fit.flexbayes_priors = function(object, ...) {
+fit.flexbayes_priors = function(object, ..., allow_fallback = FALSE) {
   arguments = list(...)
   allowed = c("chains", "iter", "warmup", "thin", "seed", "cores", "refresh",
     "control", "init", "save_warmup", "sample_file", "diagnostic_file", "verbose",
@@ -25,5 +29,5 @@ fit.flexbayes_priors = function(object, ...) {
   # Use the same validated export as direct backend fitting.
   backend = object$backend$package
   if (!identical(backend, "rstanarm")) stop("Unsupported fitting backend: ", backend)
-  prior_rstanarm_fit(c(as_rstanarm(object), arguments))
+  prior_rstanarm_fit(c(as_rstanarm(object, allow_fallback = allow_fallback), arguments))
 }

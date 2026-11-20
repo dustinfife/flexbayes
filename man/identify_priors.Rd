@@ -30,3 +30,11 @@ contrast and interaction columns. Gaussian defaults depend on mean(y) and
 sd(y); GLM defaults use the link scale and predictor SDs.
 No posterior fitting is performed.
 }
+\details{
+Unsuccessful updates preserve all beliefs and retain the last valid
+prior, or the original backend default. Summary and plots show that retained
+prior with a fallback label; they do not imply that current beliefs were met.
+Failed outcome reconciliation retains the previous coherent coefficient-prior
+collection. Export, fitting and simulation require explicit approval through
+allow_fallback = TRUE before using these priors.
+}

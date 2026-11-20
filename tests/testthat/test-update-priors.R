@@ -38,7 +38,7 @@ test_that("existing fitting failures and contradictions retain all constraints",
   expect_identical(q, update(p, parameter = "x", belief(mode = 150), belief(value < 100, probability = .1), belief(value > 300, probability = .1)))
   expect_length(q$beliefs$x, 3)
   expect_identical(q$candidates$x$status, "no_supported_fit")
-  expect_null(q$selected$x)
+  expect_identical(q$selected$x, p$selected$x)
   spec = update_priors("x", belief(value < 0, probability = .95), belief(value > 1, probability = .95))
   q = p + spec
   expect_identical(q$candidates$x$status, "contradictory")

@@ -7,13 +7,18 @@
 \usage{
 fit(object, ...)
 
-\method{fit}{flexbayes_priors}(object, ...)
+\method{fit}{flexbayes_priors}(object, ..., allow_fallback = FALSE)
 }
 \arguments{
 \item{object}{A prior specification.}
 
 \item{...}{Named backend sampling or algorithm arguments. Model and prior
 arguments cannot be overridden. See details.}
+
+\item{allow_fallback}{Use retained priors despite unsuccessful elicitation?
+Defaults to FALSE. TRUE explicitly approves their use and issues a warning;
+current beliefs remain recorded and are not treated as satisfied. Model-data
+validation and backend restrictions still apply.}
 }
 \value{
 The backend's native fitted model (stanreg for rstanarm).
