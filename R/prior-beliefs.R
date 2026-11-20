@@ -147,7 +147,12 @@
 #' Candidates are exponential, half-normal, half-Cauchy and half-Student's t,
 #' using the positive zero-centered families supported by rstanarm's `prior_aux`
 #' in version 2.32.2. All have mode zero; a mode outside the tolerance of zero
-#' is backend-incompatible. No positive mode is reinterpreted as a mean.
+#' is backend-incompatible for rstanarm. No positive mode is reinterpreted as a mean.
+#' brms additionally supports Gamma (shape/rate) and lognormal (meanlog/sdlog)
+#' sigma candidates, including positive modes. Their actual sigma moments are
+#' used. A single informative belief references the universal exponential
+#' default's SD, or its mean for an SD belief; this choice is disclosed.
+#' Extra reference moments are not added to the user's belief list.
 #' Half-Cauchy has no finite mean or SD. Half-t mean requires df > 1 and SD
 #' requires df > 2. These limitations apply when evaluating beliefs as well
 #' as when displaying moments. A half-family scale is the underlying Normal
@@ -165,6 +170,10 @@
 #' Selection prefers a compatible exponential, then one-parameter half-normal
 #' and half-Cauchy candidates, then the two-parameter half-t. This tie-breaker
 #' does not establish uniqueness across families or within acceptance bands.
+#' With brms, Gamma then lognormal candidates follow the existing families. Their
+#' profiled shape searches use log-shape in `[-12,12]` (Gamma positive-mode shapes
+#' are 1 + exp(log-shape)); failure is numerical nonverification, not a proof of
+#' mathematical incompatibility. Every original tolerance must still pass.
 #' Uninformative beliefs such as `mode = 0` retain the disclosed default scale.
 #' Diagnostics retain the original backend default. Expected-outcome
 #' reconciliation never changes an elicited or default sigma prior.
@@ -422,7 +431,7 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
     return(prior_select_compatible(object))
   }
 
-  result = tryCatch(prior_fit_candidates(records, object$defaults[[parameter]]), error = function(error)
+  result = tryCatch(prior_fit_candidates(records, object$defaults[[parameter]], object$backend$package), error = function(error)
     list(valid = FALSE, status = "no_supported_fit", alternatives = list(),
       message = paste("Numerical elicitation failed; mathematical incompatibility was not established.", conditionMessage(error))))
   object$candidates[[parameter]] = result

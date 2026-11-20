@@ -10,7 +10,11 @@
 #' refresh, control, init, save_warmup, sample_file, diagnostic_file, verbose,
 #' algorithm, adapt_delta, mean_PPD and prior_PD. Unknown and partially matched
 #' names are rejected. prior_PD = TRUE explicitly requests prior-only sampling.
-#' @return The backend's native fitted model (stanreg for rstanarm).
+#' For brms, supported arguments are chains, iter, warmup, thin, seed, cores,
+#' refresh, control, init, save_warmup, algorithm, sample_prior, backend, silent,
+#' future, threads and open_progress. Use sample_prior = 'only' for prior-only
+#' sampling. backend selects brms's Stan engine; it does not change the priors.
+#' @return The backend's native fitted model (stanreg or brmsfit).
 #' @export
 fit = function(object, ...) UseMethod("fit")
 
@@ -21,6 +25,8 @@ fit.flexbayes_priors = function(object, ..., allow_fallback = FALSE) {
   allowed = c("chains", "iter", "warmup", "thin", "seed", "cores", "refresh",
     "control", "init", "save_warmup", "sample_file", "diagnostic_file", "verbose",
     "algorithm", "adapt_delta", "mean_PPD", "prior_PD")
+  backend = object$backend$package
+  if (backend == "brms") allowed = c("chains", "iter", "warmup", "thin", "seed", "cores", "refresh", "control", "init", "save_warmup", "algorithm", "sample_prior", "backend", "silent", "future", "threads", "open_progress")
   names = names(arguments)
   if (length(arguments) && (is.null(names) || anyNA(names) || any(!nzchar(names)) || anyDuplicated(names))) stop("Fitting arguments must have unique, complete names.")
   prohibited = setdiff(names, allowed)
@@ -28,6 +34,7 @@ fit.flexbayes_priors = function(object, ..., allow_fallback = FALSE) {
 
   # Use the same validated export as direct backend fitting.
   backend = object$backend$package
+  if (backend == "brms") return(prior_brms_fit(c(as_brms(object, allow_fallback = allow_fallback), arguments)))
   if (!identical(backend, "rstanarm")) stop("Unsupported fitting backend: ", backend)
   prior_rstanarm_fit(c(as_rstanarm(object, allow_fallback = allow_fallback), arguments))
 }

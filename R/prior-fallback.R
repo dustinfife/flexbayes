@@ -25,6 +25,7 @@ prior_available_compatible = function(object, selected = object$selected) {
   valid = vapply(selected, function(prior) tryCatch({ prior_validate_distribution(prior); TRUE }, error = function(e) FALSE), logical(1))
   if (!all(valid)) return(FALSE)
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
+  if (object$backend$package == "brms") return(TRUE)
   length(unique(vapply(selected[slopes], `[[`, character(1), "distribution"))) <= 1L
 }
 
@@ -142,8 +143,9 @@ prior_warn_fallback = function(object) {
 prior_fallback_summary = function(object, name, diagnostics) {
   retained = object$fallbacks[[name]]
   if (is.null(retained)) return(invisible(NULL))
-  origin = if (retained$source == "backend_default") "The original rstanarm default has been retained." else
-    "The previous successfully selected prior has been retained."
+  origin = "The previous successfully selected prior has been retained."
+  if (retained$source == "backend_default") origin = if (object$backend$package == "brms")
+    "The original flexbayes default (derived from rstanarm) has been retained." else "The original rstanarm default has been retained."
   reason = if (diagnostics || retained$status == "contradictory") retained$reason else
     switch(retained$status,
       no_supported_fit = paste("No supported prior was verified to satisfy all current beliefs for", name, "."),

@@ -18,13 +18,16 @@ identify_priors(
 
 \item{family}{Gaussian identity, binomial logit or Poisson log family.}
 
-\item{package}{Backend name.}
+\item{package}{Fitting backend: rstanarm (default) or brms. brms permits
+coefficient-specific families and additional positive sigma families.}
 }
 \value{
 A flexbayes_priors object.
 }
 \description{
-Defaults are resolved for rstanarm 2.32.2, dense design and QR = FALSE.
+Both backends start with the same proper flexbayes defaults, derived from
+rstanarm 2.32.2 (dense design, QR = FALSE). Native brms defaults are deliberately
+overridden; prior-origin metadata are stored separately from the fitting backend.
 The intercept is at the column means of the model matrix, including
 contrast and interaction columns. Gaussian defaults depend on mean(y) and
 sd(y); GLM defaults use the link scale and predictor SDs.

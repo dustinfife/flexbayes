@@ -1,5 +1,5 @@
-prior_fit_candidates = function(records, reference) {
-  if (reference$distribution == "exponential") return(prior_fit_scale_candidates(records, reference))
+prior_fit_candidates = function(records, reference, backend = "rstanarm") {
+  if (reference$distribution == "exponential") return(prior_fit_scale_candidates(records, reference, backend))
   # Fit each supported family against the complete collection of beliefs.
   families = c("normal", "student_t")
   boundary = any(vapply(records, function(r) r$type == "probability" && r$target %in% c(0, 1), logical(1)))
@@ -45,6 +45,7 @@ prior_choose_candidates = function(object) {
 
   # A family must accommodate every actual prior, including retained fallbacks.
   for (i in seq_along(families)) {
+    if (object$backend$package == "brms") next
     for (name in slopes) {
       eligible = Filter(function(c) c$family == families[i], options[[name]])
       if (length(eligible)) {
@@ -61,7 +62,7 @@ prior_choose_candidates = function(object) {
   for (name in names(options)) {
     result = object$candidates[[name]]
     eligible = options[[name]]
-    if (name %in% slopes) eligible = Filter(function(c) c$family == family, eligible)
+    if (object$backend$package == "rstanarm" && name %in% slopes) eligible = Filter(function(c) c$family == family, eligible)
     if (length(eligible)) {
       chosen = eligible[[which.min(vapply(eligible, `[[`, numeric(1), "rank"))]]
       object$selected[name] = list(chosen$distribution)

@@ -322,3 +322,10 @@ includes it. `as_rstanarm()` exports adjusted Normal locations and scales with
 `fit()` uses that same export. Changed data, selected distributions, or stale
 reconciliation diagnostics are rejected. Export remains restricted to the
 existing verified rstanarm version; automated tests do not require Stan sampling.
+
+The brms adapter uses the same proper, rstanarm-derived reference priors and
+the same centered model matrix. Gaussian reconciliation therefore gives the
+same selected distributions for equivalent models. `as_brms()` exports the
+reconciled Normal coefficients individually and the centered intercept with
+`class = "Intercept"`; it overrides native brms defaults. Sigma is unchanged.
+Random effects and distributional regression remain outside this workflow.

@@ -1,4 +1,5 @@
-prior_scale_families = function() c("exponential", "half_normal", "half_cauchy", "half_student_t")
+prior_scale_families = function(backend = "rstanarm") c("exponential", "half_normal", "half_cauchy", "half_student_t",
+  if (backend == "brms") c("gamma", "lognormal"))
 
 # This policy is separate from the fixed df = 7 policy for coefficient priors.
 # Finite search limits are numerical limits, not a mathematical feasibility test.
@@ -178,14 +179,15 @@ prior_fit_scale_family = function(family, records, reference) {
   result
 }
 
-prior_fit_scale_candidates = function(records, reference) {
-  families = prior_scale_families()
+prior_fit_scale_candidates = function(records, reference, backend = "rstanarm") {
+  families = prior_scale_families(backend)
   incompatible = any(vapply(records, function(r) r$type == "mode" && abs(r$target) > r$tolerance, logical(1)))
-  if (incompatible) return(list(valid = FALSE, status = "backend_incompatible",
+  if (incompatible && backend == "rstanarm") return(list(valid = FALSE, status = "backend_incompatible",
     message = "The supported zero-centered rstanarm sigma families all have mode zero. The requested mode is outside its tolerance of zero; it was not reinterpreted as a mean.",
     alternatives = list(), mathematical = NULL))
   alternatives = stats::setNames(lapply(families, function(family) {
-    result = tryCatch(prior_fit_scale_family(family, records, reference),
+    if (incompatible && !family %in% c("gamma", "lognormal")) return(list(valid = FALSE, family = family, message = "This family has mode zero."))
+    result = tryCatch(if (family %in% c("gamma", "lognormal")) prior_fit_positive(family, records, reference) else prior_fit_scale_family(family, records, reference),
       error = function(e) list(valid = FALSE, message = conditionMessage(e)))
     result$family = family
     result
@@ -213,9 +215,11 @@ prior_scale_summary = function(object, diagnostics) {
   sd = prior_distribution_operation(prior, "sd")
   prior_console_line(paste0("Sigma prior mean: ", prior_scale_number(mean),
     "; SD: ", prior_scale_number(sd), "; median: ",
-    prior_scale_number(prior_distribution_operation(prior, "quantile", .5)), "; mode: 0."))
+    prior_scale_number(prior_distribution_operation(prior, "quantile", .5)), "; mode: ",
+    prior_scale_number(prior_distribution_operation(prior, "mode")), "."))
   if (!diagnostics) return(invisible(NULL))
-  prior_console_line(paste("Original backend default:", prior_format(object$defaults$sigma)))
+  prior_console_line(paste(if (object$backend$package == "brms") "Universal flexbayes default (rstanarm-derived):" else "Original backend default:", prior_format(object$defaults$sigma)))
+  if (object$backend$package == "brms") prior_console_line("After exponential and the half families, Gamma then lognormal candidates are considered. A single informative constraint uses the universal default SD as reference (or its mean for an SD belief); see the selected candidate diagnostics.")
   prior_console_line("Selection prefers the backend-default family, then fewer parameters; acceptable families need not be unique. Half-t df fitting is separate from the fixed df = 7 coefficient policy.")
   candidate = object$candidates$sigma
   if (!is.null(candidate$numerical)) prior_console_line(candidate$numerical)
@@ -231,5 +235,5 @@ prior_scale_number = function(value) {
 prior_candidate_label = function(family) {
   if (is.null(family)) return("Distribution")
   switch(family, normal = "Normal", student_t = "Student's t", exponential = "Exponential",
-    half_normal = "Half-Normal", half_student_t = "Half-Student's t", half_cauchy = "Half-Cauchy", "Distribution")
+    half_normal = "Half-Normal", half_student_t = "Half-Student's t", half_cauchy = "Half-Cauchy", gamma = "Gamma", lognormal = "Lognormal", "Distribution")
 }

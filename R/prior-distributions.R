@@ -4,6 +4,12 @@ prior_student_t_policy = function() list(df = 7)
 
 prior_distribution_registry = function() {
   list(
+    gamma = list(density = stats::dgamma, cdf = stats::pgamma, quantile = stats::qgamma,
+      random = stats::rgamma, survival = prior_gamma_survival, mean = prior_gamma_mean,
+      sd = prior_gamma_sd, mode = prior_gamma_mode, support = c(0, Inf)),
+    lognormal = list(density = stats::dlnorm, cdf = stats::plnorm, quantile = stats::qlnorm,
+      random = stats::rlnorm, survival = prior_lnorm_survival, mean = prior_lnorm_mean,
+      sd = prior_lnorm_sd, mode = prior_lnorm_mode, support = c(0, Inf)),
     normal = list(density = stats::dnorm, cdf = stats::pnorm,
       quantile = stats::qnorm, random = stats::rnorm, support = c(-Inf, Inf), sd_factor = 1),
     student_t = list(density = prior_dt, cdf = prior_pt, quantile = prior_qt,
@@ -35,13 +41,14 @@ prior_validate_distribution = function(prior) {
   # Check each family's parameters before calling its distribution functions.
   required = switch(prior$distribution, normal = c("mean", "sd"),
     student_t = c("location", "scale", "df"), exponential = "rate",
+    gamma = c("shape", "rate"), lognormal = c("meanlog", "sdlog"),
     half_normal = "scale", half_student_t = c("scale", "df"), half_cauchy = "scale", NULL)
   if (is.null(required)) stop("Unsupported distribution.")
   for (name in required) {
     value = prior[[name]]
     if (!is.numeric(value) || length(value) != 1L || !is.finite(value)) stop("Invalid distribution parameter: ", name)
   }
-  positive = intersect(required, c("sd", "scale", "df", "rate"))
+  positive = intersect(required, c("sd", "scale", "df", "rate", "shape", "sdlog"))
   if (any(vapply(prior[positive], function(v) v <= 0, logical(1)))) stop("Distribution scales, rates and df must be positive.")
   invisible(prior)
 }

@@ -21,7 +21,7 @@ current beliefs remain recorded and are not treated as satisfied. Model-data
 validation and backend restrictions still apply.}
 }
 \value{
-The backend's native fitted model (stanreg for rstanarm).
+The backend's native fitted model (stanreg or brmsfit).
 }
 \description{
 Fit a model using its selected priors
@@ -31,4 +31,8 @@ Supported arguments are chains, iter, warmup, thin, seed, cores,
 refresh, control, init, save_warmup, sample_file, diagnostic_file, verbose,
 algorithm, adapt_delta, mean_PPD and prior_PD. Unknown and partially matched
 names are rejected. prior_PD = TRUE explicitly requests prior-only sampling.
+For brms, supported arguments are chains, iter, warmup, thin, seed, cores,
+refresh, control, init, save_warmup, algorithm, sample_prior, backend, silent,
+future, threads and open_progress. Use sample_prior = 'only' for prior-only
+sampling. backend selects brms's Stan engine; it does not change the priors.
 }

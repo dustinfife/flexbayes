@@ -1,6 +1,8 @@
 #' Identify regression priors
 #'
-#' Defaults are resolved for rstanarm 2.32.2, dense design and QR = FALSE.
+#' Both backends start with the same proper flexbayes defaults, derived from
+#' rstanarm 2.32.2 (dense design, QR = FALSE). Native brms defaults are deliberately
+#' overridden; prior-origin metadata are stored separately from the fitting backend.
 #' The intercept is at the column means of the model matrix, including
 #' contrast and interaction columns. Gaussian defaults depend on mean(y) and
 #' sd(y); GLM defaults use the link scale and predictor SDs.
@@ -8,7 +10,8 @@
 #' @param formula Model formula.
 #' @param data Data frame.
 #' @param family Gaussian identity, binomial logit or Poisson log family.
-#' @param package Backend name.
+#' @param package Fitting backend: rstanarm (default) or brms. brms permits
+#'   coefficient-specific families and additional positive sigma families.
 #' @details Unsuccessful updates preserve all beliefs and retain the last valid
 #' prior, or the original backend default. Summary and plots show that retained
 #' prior with a fallback label; they do not imply that current beliefs were met.
@@ -18,10 +21,10 @@
 #' @return A flexbayes_priors object.
 #' @export
 identify_priors = function(formula, data, family = stats::gaussian(), package = "rstanarm") {
-  if (!identical(package, "rstanarm")) stop("Only rstanarm is supported.")
-  if (!requireNamespace("rstanarm", quietly = TRUE)) stop("Install rstanarm to resolve defaults.")
-  version = as.character(utils::packageVersion("rstanarm"))
-  if (version != "2.32.2") stop("Default resolution is verified only for rstanarm 2.32.2; installed: ", version)
+  if (!is.character(package) || length(package) != 1L || !package %in% c("rstanarm", "brms")) stop("Choose package = 'rstanarm' or 'brms'.")
+  if (!requireNamespace(package, quietly = TRUE)) stop("Install ", package, " to identify priors.")
+  version = as.character(utils::packageVersion(package))
+  if (package == "rstanarm" && version != "2.32.2") stop("Default resolution is verified only for rstanarm 2.32.2; installed: ", version)
   prior_validate_family(family)
   if (!inherits(formula, "formula") || length(formula) != 3L) stop("Supply a two-sided formula.")
   if (any(all.names(formula) %in% c("|", "||"))) stop("Mixed models are not supported.")
@@ -34,7 +37,7 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   y = stats::model.response(frame)
   if (!is.numeric(y) || is.matrix(y) || any(!is.finite(y)) || nrow(X) < 2L || any(!is.finite(X))) stop("Finite numeric response and design required.")
   if (!ncol(X) || qr(X)$rank != ncol(X)) stop("A nonempty full-rank design is required.")
-  prior_validate_response(y, family)
+  prior_validate_response(y, family, package)
   sy = stats::sd(y)
   intercept = attr(terms, "intercept") == 1L
   slopes = setdiff(colnames(X), "(Intercept)")
@@ -53,6 +56,7 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   out = list(
     model = list(formula = formula, data = data, family = family, frame = frame, terms = terms, X = X, contrasts = attr(X, "contrasts"), reference = reference),
     parameters = parameters,
+    default_origin = list(package = "rstanarm", version = "2.32.2", policy = "flexbayes proper defaults"),
     defaults = defaults,
     selected = defaults,
     beliefs = stats::setNames(rep(list(list()), length(defaults)), names(defaults)),
@@ -64,6 +68,7 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
 
   out$model$standardization = prior_standardization_metadata(out$model)
   class(out) = "flexbayes_priors"
+  if (package == "brms") out$backend$coefficients = prior_brms_design(out)$coefficients
   prior_retention_initialize(out)
 }
 
@@ -77,6 +82,8 @@ prior_format = function(prior) {
     half_normal = sprintf("Half-Normal(0, %.3g)", prior$scale),
     half_student_t = sprintf("Half-t(df=%.4g, 0, %.3g)", prior$df, prior$scale),
     half_cauchy = sprintf("Half-Cauchy(0, %.3g)", prior$scale),
+    gamma = sprintf("Gamma(shape=%.4g, rate=%.4g)", prior$shape, prior$rate),
+    lognormal = sprintf("Lognormal(%.4g, %.4g)", prior$meanlog, prior$sdlog),
     "Unsupported"
   )
 }
@@ -88,9 +95,12 @@ prior_console_line = function(text) {
 #' @export
 print.flexbayes_priors = function(x, ...) {
   cat("Priors (", x$backend$package, " ", x$backend$version, ")\n", sep = "")
+  if (x$backend$package == "brms") prior_console_line("Defaults: flexbayes proper priors derived from rstanarm 2.32.2; native brms defaults are overridden.")
   source = vapply(names(x$selected), function(name) {
-    if (!is.null(x$fallbacks[[name]])) return(if (x$fallbacks[[name]]$source == "backend_default")
-      "Backend default (fallback)" else "Previous elicited (fallback)")
+    if (!is.null(x$fallbacks[[name]])) {
+      if (x$fallbacks[[name]]$source != "backend_default") return("Previous elicited (fallback)")
+      return(if (x$backend$package == "brms") "flexbayes default (fallback)" else "Backend default (fallback)")
+    }
     if (identical(x$candidates[[name]]$status, "contradictory")) return("Contradictory")
     if (identical(x$candidates[[name]]$status, "backend_incompatible")) return("Incompatible")
     if (is.null(x$selected[[name]])) return("Unresolved")
@@ -98,7 +108,7 @@ print.flexbayes_priors = function(x, ...) {
         !isTRUE(all.equal(x$joint$baseline[[name]], x$selected[[name]]))) {
       return(if (length(x$beliefs[[name]])) "Adjusted (elicited)" else "Adjusted (default)")
     }
-    if (!length(x$beliefs[[name]])) return("Backend default")
+    if (!length(x$beliefs[[name]])) return(if (x$backend$package == "brms") "flexbayes default" else "Backend default")
     if (isTRUE(x$candidates[[name]]$reference_used)) return("Elicited*")
     "Elicited"
   }, character(1))
@@ -106,7 +116,7 @@ print.flexbayes_priors = function(x, ...) {
     Prior = vapply(x$selected, prior_format, character(1)),
     Source = unname(source), Beliefs = lengths(x$beliefs), row.names = NULL)
   print(table, row.names = FALSE, right = FALSE)
-  if (any(source == "Elicited*")) prior_console_line("* Backend default used to resolve underdetermined beliefs.")
+  if (any(source == "Elicited*")) prior_console_line(if (x$backend$package == "brms") "* Universal flexbayes default used to resolve underdetermined beliefs; see diagnostics for the retained reference moment." else "* Backend default used to resolve underdetermined beliefs.")
   if (length(prior_fallback_issues(x))) prior_console_line("Fallback priors are available for inspection; current elicitation was unsuccessful. See summary() before using allow_fallback = TRUE.")
   if (!is.null(x$joint)) cat("Outcome reconciliation:", x$joint$status, ";", length(x$outcomes), "configuration(s).\n")
   invisible(x)

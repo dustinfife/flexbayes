@@ -763,6 +763,44 @@ that backend limitation rather than treating the mode as a mean.
 simulations. Expected-response predictions exclude that residual noise,
 and `update_outcome()` never adjusts sigma to meet expected-price beliefs.
 
+## Choosing a backend
+
+The same beliefs can go to either backend. `flexbayes` deliberately starts
+both with the same proper priors, derived from rstanarm 2.32.2. Choosing
+brms does **not** switch to native brms defaults, which include flat
+coefficient priors.
+
+```{r backend-choice}
+backend_priors = lapply(c("rstanarm", "brms"), function(backend) {
+  identify_priors(y ~ x + z, d, package = backend) +
+    update_priors("x", belief(mode = 3), belief(sd = 1))
+})
+stopifnot(identical(backend_priors[[1]]$selected,
+                    backend_priors[[2]]$selected))
+brms_arguments = as_brms(backend_priors[[2]])
+```
+
+Use `as_rstanarm()` or `as_brms()` to inspect the model arguments, then
+`fit()` to fit through the selected backend. The centered intercept has
+the same meaning in both. brms also permits different coefficient-prior
+families and adds Gamma and lognormal sigma candidates:
+
+```{r brms-sigma}
+brms_sigma = identify_priors(
+  sale_price ~ sqft + age + bedrooms, homes_2024, package = "brms"
+) + update_priors("sigma", belief(mode = 30000))
+summary(brms_sigma)
+```
+
+We supplied a peak but no width. Here the Gamma prior keeps the universal
+exponential default's SD as an explicitly disclosed reference. Add another
+belief if that width doesn't reflect your knowledge. This is a prior for
+sigma itself, not for residual errors. With rstanarm, the supported sigma
+families all peak at zero, so the same positive-mode request retains a
+fallback instead. Whichever backend you choose, inspect the prior
+predictive implications before fitting. Fallbacks still require explicit
+`allow_fallback = TRUE` approval for export, fitting, or simulation.
+
 ## Other ways to express your beliefs
 
 You may find standardized slopes easier to think about. Instead of score
@@ -796,7 +834,8 @@ See [`identify_priors()`](../html/identify_priors.html),
 [`update_priors()`](../html/update_priors.html), [`update()` for prior
 objects](../html/update.flexbayes_priors.html),
 [`check_prior()`](../html/check_prior.html),
-[`as_rstanarm()`](../html/as_rstanarm.html), and
+[`as_rstanarm()`](../html/as_rstanarm.html),
+[`as_brms()`](../html/as_brms.html), and
 [`fit()`](../html/fit.html) for details. Logistic and Poisson models
 also support additional belief scales, including centered-intercept
 outcome beliefs and odds-ratio or rate-ratio beliefs for eligible

@@ -93,9 +93,11 @@ prior_predictive_validate = function(object, allow_fallback = FALSE) {
   }
   slopes = setdiff(colnames(object$model$X), "(Intercept)")
   families = unique(vapply(object$selected[slopes], `[[`, character(1), "distribution"))
-  if (!isTRUE(object$backend$compatible) || length(families) > 1L) stop("Prior specification is incompatible with the backend.")
+  if (!isTRUE(object$backend$compatible) || (object$backend$package == "rstanarm" && length(families) > 1L)) stop("Prior specification is incompatible with the backend.")
   if ("(Intercept)" %in% required && !object$selected$`(Intercept)`$distribution %in% c("normal", "student_t")) stop("Unsupported backend intercept prior.")
-  if (object$backend$package != "rstanarm" || any(!families %in% c("normal", "student_t"))) stop("Unsupported backend prior specification.")
+  if (!object$backend$package %in% c("rstanarm", "brms") || any(!families %in% c("normal", "student_t"))) stop("Unsupported backend prior specification.")
+  if (prior_has_sigma(object) && !object$selected$sigma$distribution %in% prior_scale_families(object$backend$package)) stop("Unsupported sigma prior for selected backend.")
+  if (object$backend$package == "brms") prior_brms_validate_data(object)
   if (length(issues)) prior_warn_fallback(object)
   invisible(object)
 }

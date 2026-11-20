@@ -812,6 +812,7 @@ prior_joint_summary = function(x) {
   status = if (ready) "Successful" else switch(object$joint$status,
     incompatible = "Incompatible", unresolved = "Not resolved", "Needs review")
   cat("Prior reconciliation:", status, "\n")
+  if (object$backend$package == "brms") prior_console_line("brms backend; starting priors are proper flexbayes defaults derived from rstanarm, overriding native brms defaults.")
   prior_joint_summary_outcomes(object, ready)
   prior_joint_summary_coefficients(object, ready)
   if (isTRUE(object$joint$retained)) {
