@@ -1,6 +1,6 @@
 test_that("normal export is explicit, ordered, centered and unscaled", {
   p = prior_example()
-  p = update(p, parameter = "x", belief(mean = 1.5), belief(sd = .91))
+  p = (p + update_priors(parameter = "x", belief(mean = 1.5), belief(sd = .91)))
   a = as_rstanarm(p)
   expect_named(a, c("formula", "data", "family", "contrasts", "na.action", "prior", "prior_intercept", "prior_aux", "QR", "sparse"))
   expect_equal(names(a$prior$location), c("x", "gb"))
@@ -34,7 +34,7 @@ test_that("export matches effective backend preprocessing", {
 test_that("t export uses scale rather than sd and retains df", {
   p = prior_example()
   p = identify_priors(y ~ x, p$model$data)
-  p = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
+  p = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7))))
   a = as_rstanarm(p)
   expect_equal(a$prior$dist, "t")
   expect_equal(unname(a$prior$df), 7)
@@ -76,11 +76,11 @@ test_that("fit protects model arguments and passes ordinary arguments unchanged"
 
 test_that("invalid selections and changed models cannot export", {
   p = prior_example()
-  q = update(p, parameter = "x", belief(value < 0, probability = .95), belief(value > 1, probability = .95))
+  q = (p + update_priors(parameter = "x", belief(value < 0, probability = .95), belief(value > 1, probability = .95)))
   expect_error(as_rstanarm(q), "contradictory")
-  q = update(p, parameter = "x", belief(value < 0, probability = 0))
+  q = (p + update_priors(parameter = "x", belief(value < 0, probability = 0)))
   expect_error(as_rstanarm(q), "no_supported_fit")
-  q = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
+  q = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7))))
   expect_error(as_rstanarm(q), "x.*backend_incompatible.*allow_fallback")
   q = p
   q$model$data$x = q$model$data$x + 1
@@ -88,7 +88,7 @@ test_that("invalid selections and changed models cannot export", {
   q = p
   q$selected$x$sd = Inf
   expect_error(as_rstanarm(q), "Cannot sample prior")
-  q = update(p, parameter = "x", belief(mean = 2))
+  q = (p + update_priors(parameter = "x", belief(mean = 2)))
   q$selected$x$mean = 3
   expect_error(as_rstanarm(q), "does not satisfy recorded beliefs for x")
   q = p

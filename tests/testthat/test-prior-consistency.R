@@ -1,7 +1,7 @@
 test_that("disjoint beliefs are rejected before candidate fitting", {
   p = prior_example()
-  p = update(p, parameter = "x", belief(mean = 0),
-    belief(value < 0, probability = .95), belief(value > 1, probability = .95))
+  p = (p + update_priors(parameter = "x", belief(mean = 0),
+    belief(value < 0, probability = .95), belief(value > 1, probability = .95)))
   expect_identical(p$candidates$x$status, "contradictory")
   expect_equal(p$candidates$x$conflicts, c(2L, 3L))
   expect_null(p$candidates$x$distribution)
@@ -12,7 +12,7 @@ test_that("disjoint beliefs are rejected before candidate fitting", {
   expect_match(output, "1.90")
   expect_match(output, "mutually exclusive")
   expect_match(output, "fitting skipped")
-  p = update(p, parameter = "x", remove = c(1, 3))
+  p = (p + update_priors(parameter = "x", remove = c(1, 3)))
   expect_identical(p$candidates$x$status, "selected")
 })
 
@@ -44,7 +44,7 @@ test_that("boundary probabilities are consistent but not normal fits", {
   expect_false(check(list(belief(value < 0, probability = .5), belief(value < 0, probability = .500001)))$contradictory)
   expect_error(belief(value < 0, probability = -.1))
   p = prior_example()
-  p = update(p, parameter = "x", belief(value < 0, probability = 0))
+  p = (p + update_priors(parameter = "x", belief(value < 0, probability = 0)))
   expect_identical(p$candidates$x$status, "no_supported_fit")
   expect_identical(p$selected$x, p$defaults$x)
   expect_match(p$candidates$x$message, "consistent")

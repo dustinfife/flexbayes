@@ -1,6 +1,6 @@
 fallback_student_beliefs = function(object, parameter) {
-  update(object, parameter = parameter, belief(mean = 0), belief(sd = sqrt(7 / 5)),
-    belief(value < 1, probability = pt(1, 7)))
+  (object + update_priors(parameter = parameter, belief(mean = 0), belief(sd = sqrt(7 / 5)),
+    belief(value < 1, probability = pt(1, 7))))
 }
 
 test_that("initial unsuccessful sigma elicitation retains the backend default", {
@@ -50,20 +50,20 @@ test_that("previous elicited priors survive failed additions and recover on remo
   expect_identical(q$candidates$sigma$status, "backend_incompatible")
   expect_match(paste(capture.output(print(summary(q))), collapse = "\n"), "Previous elicited (fallback)", fixed = TRUE)
   expect_identical(q$selected$sigma$rate, 1 / 30000)
-  restored = update(q, parameter = "sigma", remove = 2)
+  restored = (q + update_priors(parameter = "sigma", remove = 2))
   expect_null(restored$fallbacks$sigma)
   expect_identical(restored$selected, p$selected)
   expect_no_warning(as_rstanarm(restored))
-  replaced = update(q, parameter = "sigma", remove = 1:2, belief(mean = 5000))
+  replaced = (q + update_priors(parameter = "sigma", remove = 1:2, belief(mean = 5000)))
   expect_null(replaced$fallbacks$sigma)
   expect_identical(replaced$selected$sigma$rate, 1 / 5000)
-  cleared = update(q, parameter = "sigma", remove = 1:2)
+  cleared = (q + update_priors(parameter = "sigma", remove = 1:2))
   expect_identical(cleared$selected$sigma, p$defaults$sigma)
   expect_identical(cleared$last_valid_source[["sigma"]], "backend_default")
 })
 
 test_that("coefficient failures preserve priors and mathematical diagnostics", {
-  p = update(prior_example(), parameter = "x", belief(mean = 2), belief(sd = 1))
+  p = (prior_example() + update_priors(parameter = "x", belief(mean = 2), belief(sd = 1)))
   q = p + update_priors("x", belief(value < 0, probability = .95), belief(value > 1, probability = .95))
   expect_identical(q$selected, p$selected)
   expect_identical(q$candidates$x$status, "contradictory")
@@ -74,7 +74,7 @@ test_that("coefficient failures preserve priors and mathematical diagnostics", {
   expect_error(as_rstanarm(q), "contradictory")
   expect_warning({args = as_rstanarm(q, allow_fallback = TRUE)}, "contradictory")
   expect_identical(args, as_rstanarm(p))
-  restored = update(q, parameter = "x", remove = 3:4)
+  restored = (q + update_priors(parameter = "x", remove = 3:4))
   expect_identical(restored$selected, p$selected)
   expect_null(restored$fallbacks$x)
 })
@@ -91,20 +91,20 @@ test_that("backend-compatible retained collections recover across update orders"
     expect_equal(q$candidates[[order[1]]]$alternatives, ranks)
     expect_true(all(vapply(q$selected[c("x", "gb")], function(p) p$distribution == "student_t", logical(1))))
     # Resetting one slope must not silently discard the other slope's valid t.
-    cleared = update(q, parameter = order[2], remove = 1:3)
+    cleared = (q + update_priors(parameter = order[2], remove = 1:3))
     expect_identical(cleared$selected, q$selected)
     expect_true(cleared$backend$compatible)
     expect_identical(cleared$candidates[[order[2]]]$status, "backend_incompatible")
     expect_error(as_rstanarm(cleared), "allow_fallback")
     expect_warning(as_rstanarm(cleared, allow_fallback = TRUE), "fallback")
-    restored = update(cleared, parameter = order[1], remove = 1:3)
+    restored = (cleared + update_priors(parameter = order[1], remove = 1:3))
     expect_identical(restored$selected, base$selected)
     expect_length(restored$fallbacks, 0)
   }
 })
 
 test_that("multiple failures and numerical failures preserve independent successes", {
-  p = update(prior_example(), parameter = "x", belief(mean = 2))
+  p = (prior_example() + update_priors(parameter = "x", belief(mean = 2)))
   q = p + update_priors("sigma", belief(mode = 5)) +
     update_priors("x", belief(mean = -100))
   expect_identical(q$selected, p$selected)
@@ -119,8 +119,8 @@ test_that("multiple failures and numerical failures preserve independent success
 })
 
 test_that("failed outcome reconciliation retains a coherent previous joint collection", {
-  p = joint_example() + update_outcome(list(x = 6, z = 1), belief(mean = 12))
-  expect_warning({q = p + update_outcome(list(x = 6, z = 1), belief(mean = 100))}, "incompatible")
+  p = joint_example() + update_priors(outcome = list(x = 6, z = 1), belief(mean = 12))
+  expect_warning({q = p + update_priors(outcome = list(x = 6, z = 1), belief(mean = 100))}, "incompatible")
   expect_identical(q$selected, p$selected)
   expect_true(q$joint$retained)
   expect_identical(q$joint$status, "incompatible")
@@ -141,7 +141,7 @@ test_that("failed outcome reconciliation retains a coherent previous joint colle
 test_that("numerical outcome failures remain unverified and preserve priors", {
   p = joint_example()
   local_mocked_bindings(prior_joint_solve = function(...) stop("forced numerical failure"))
-  expect_warning({q = p + update_outcome(list(x = 6, z = 1), belief(mean = 100))}, "No mathematical incompatibility")
+  expect_warning({q = p + update_priors(outcome = list(x = 6, z = 1), belief(mean = 100))}, "No mathematical incompatibility")
   expect_identical(q$selected, p$selected)
   expect_identical(q$joint$status, "unresolved")
   expect_true(q$joint$retained)

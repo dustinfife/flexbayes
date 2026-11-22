@@ -8,11 +8,11 @@ test_that("ratio quantiles exactly match link constraints", {
     p = ratio_example(family)
     scale = if (family$family == "binomial") "odds_ratio" else "rate_ratio"
     for (ratio in c(.5, 1, 2)) {
-      a = update(p, parameter = "x", belief(value < ratio, probability = .8, scale = scale))
-      b = update(p, parameter = "x", belief(value < log(ratio), probability = .8))
+      a = (p + update_priors(parameter = "x", belief(value < ratio, probability = .8, scale = scale)))
+      b = (p + update_priors(parameter = "x", belief(value < log(ratio), probability = .8)))
       expect_equal(a$selected$x, b$selected$x)
-      a = update(p, parameter = "x", belief(value > ratio, probability = .8, scale = scale))
-      b = update(p, parameter = "x", belief(value > log(ratio), probability = .8))
+      a = (p + update_priors(parameter = "x", belief(value > ratio, probability = .8, scale = scale)))
+      b = (p + update_priors(parameter = "x", belief(value > log(ratio), probability = .8)))
       expect_equal(a$selected$x, b$selected$x)
       expect_identical(a$beliefs$x[[1]]$scale, scale)
       expect_equal(a$beliefs$x[[1]]$threshold, ratio)
@@ -26,13 +26,13 @@ test_that("single ratio moments retain actual backend reference parameters", {
     scale = if (family$family == "binomial") "odds_ratio" else "rate_ratio"
     s = p$defaults$x$sd
     for (target in c(.5, 1, 2)) {
-      mode = update(p, parameter = "x", belief(mode = target, scale = scale))
+      mode = (p + update_priors(parameter = "x", belief(mode = target, scale = scale)))
       expect_equal(mode$selected$x$mean, log(target) + s^2)
       expect_equal(mode$selected$x$sd, s)
-      mean = update(p, parameter = "x", belief(mean = target, scale = scale))
+      mean = (p + update_priors(parameter = "x", belief(mean = target, scale = scale)))
       expect_equal(mean$selected$x$mean, log(target) - s^2 / 2)
       expect_equal(mean$selected$x$sd, s)
-      sd = update(p, parameter = "x", belief(sd = target, scale = scale))
+      sd = (p + update_priors(parameter = "x", belief(sd = target, scale = scale)))
       expect_equal(sd$selected$x$mean, p$defaults$x$mean)
       expect_equal(prior_distribution_target(sd$beliefs$x[[1]], sd$selected$x), target)
       expect_true(mode$candidates$x$reference_used)
@@ -48,7 +48,7 @@ test_that("ratio multi-beliefs, density, export and native fitting boundary agre
   for (family in list(binomial(), poisson())) {
     p = ratio_example(family)
     scale = if (family$family == "binomial") "odds_ratio" else "rate_ratio"
-    q = update(p, parameter = "x", belief(mode = 2, scale = scale), belief(value < 4, probability = .95, scale = scale))
+    q = (p + update_priors(parameter = "x", belief(mode = 2, scale = scale), belief(value < 4, probability = .95, scale = scale)))
     expect_equal(q$candidates$x$status, "selected")
     expect_equal(q$candidates$x$achieved, c(2, .95), tolerance = 1e-6)
     plot = plot(q, parameter = "x", scale = scale)
@@ -67,9 +67,9 @@ test_that("ratio multi-beliefs, density, export and native fitting boundary agre
     expect_match(gsub("[[:space:]]+", " ", text), "one-unit predictor increase")
     expect_match(text, "lognormal")
     expect_match(text, "Target.*Achieved")
-    mixed = update(p, parameter = "x", belief(mean = log(2)), belief(value < 4, probability = .95, scale = scale))
+    mixed = (p + update_priors(parameter = "x", belief(mean = log(2)), belief(value < 4, probability = .95, scale = scale)))
     expect_equal(mixed$selected$x$sd, log(2) / qnorm(.95), tolerance = 1e-8)
-    moments = update(p, parameter = "x", belief(mean = 2, scale = scale), belief(sd = 1, scale = scale))
+    moments = (p + update_priors(parameter = "x", belief(mean = 2, scale = scale), belief(sd = 1, scale = scale)))
     expect_equal(moments$selected$x$sd, sqrt(log1p(1 / 4)), tolerance = 1e-6)
     expect_equal(moments$selected$x$mean, log(2) - log1p(1 / 4) / 2, tolerance = 1e-6)
   }
@@ -78,13 +78,13 @@ test_that("ratio multi-beliefs, density, export and native fitting boundary agre
 test_that("invalid ratio scales, targets and terms are rejected", {
   p = ratio_example()
   b = belief(mode = 2, scale = "odds_ratio")
-  expect_error(update(p, parameter = "(Intercept)", b), "numeric slope")
-  expect_error(update(p, parameter = "x", belief(mode = 2, scale = "rate_ratio")), "family")
-  expect_error(update(ratio_example(poisson()), parameter = "x", b), "family")
-  expect_error(update(prior_example(), parameter = "x", b), "family")
+  expect_error((p + update_priors(parameter = "(Intercept)", b)), "numeric slope")
+  expect_error((p + update_priors(parameter = "x", belief(mode = 2, scale = "rate_ratio"))), "family")
+  expect_error((ratio_example(poisson()) + update_priors(parameter = "x", b)), "family")
+  expect_error((prior_example() + update_priors(parameter = "x", b)), "family")
   for (value in c(0, -1)) {
-    expect_error(update(p, parameter = "x", belief(mode = value, scale = "odds_ratio")), "positive finite")
-    expect_error(update(p, parameter = "x", belief(value < value, probability = .5, scale = "odds_ratio")), "positive finite")
+    expect_error((p + update_priors(parameter = "x", belief(mode = value, scale = "odds_ratio"))), "positive finite")
+    expect_error((p + update_priors(parameter = "x", belief(value < value, probability = .5, scale = "odds_ratio"))), "positive finite")
   }
   for (value in c(NA, Inf, NaN)) expect_error(belief(mean = value, scale = "odds_ratio"))
   d = p$model$data
@@ -92,18 +92,18 @@ test_that("invalid ratio scales, targets and terms are rejected", {
   for (formula in list(y ~ x + I(x^2), y ~ x + log(x), y ~ log(x), y ~ poly(x, 2), y ~ x * g, y ~ I(x^2), y ~ g)) {
     q = identify_priors(formula, d, binomial())
     name = setdiff(names(q$selected), "(Intercept)")[1]
-    expect_error(update(q, parameter = name, b), "untransformed numeric slope")
+    expect_error((q + update_priors(parameter = name, b)), "untransformed numeric slope")
   }
 })
 
 test_that("ratio contradictions and t-only compatibility remain distinct", {
   p = ratio_example()
-  q = update(p, parameter = "x", belief(value < 1, probability = .95, scale = "odds_ratio"), belief(value > 2, probability = .95, scale = "odds_ratio"))
+  q = (p + update_priors(parameter = "x", belief(value < 1, probability = .95, scale = "odds_ratio"), belief(value > 2, probability = .95, scale = "odds_ratio")))
   expect_identical(q$candidates$x$status, "contradictory")
   d = p$model$data
   d$z = c(1, 0, 3, 0, 5, 2)
   p = identify_priors(y ~ x + z, d, binomial())
-  q = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < exp(1), probability = pt(1, 7), scale = "odds_ratio"))
+  q = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < exp(1), probability = pt(1, 7), scale = "odds_ratio")))
   expect_identical(q$candidates$x$status, "backend_incompatible")
   expect_equal(q$candidates$x$alternatives$student_t$distribution$df, 7)
   expect_error(as_rstanarm(q), "backend_incompatible.*allow_fallback")
@@ -111,13 +111,13 @@ test_that("ratio contradictions and t-only compatibility remain distinct", {
 
 test_that("ratio plot range and retained-reference diagnostics are explicit", {
   p = ratio_example()
-  q = update(p, parameter = "x", belief(mode = 2, scale = "odds_ratio"))
+  q = (p + update_priors(parameter = "x", belief(mode = 2, scale = "odds_ratio")))
   text = gsub("[[:space:]]+", " ", paste(capture.output(print(summary(q, diagnostics = TRUE))), collapse = "\n"))
   expect_match(text, "Elicited*", fixed = TRUE)
   expect_match(text, "Backend-default link SD")
   expect_match(text, "retained unchanged; location elicited", fixed = TRUE)
-  q = update(p, parameter = "x", belief(sd = 2, scale = "odds_ratio"))
+  q = (p + update_priors(parameter = "x", belief(sd = 2, scale = "odds_ratio")))
   expect_match(q$candidates$x$numerical, "Backend-default link mean = 0 retained unchanged", fixed = TRUE)
-  q = update(p, parameter = "x", belief(mean = 1000), belief(sd = 1))
+  q = (p + update_priors(parameter = "x", belief(mean = 1000), belief(sd = 1)))
   expect_error(plot(q, parameter = "x", scale = "odds_ratio"), "no density points were silently removed")
 })

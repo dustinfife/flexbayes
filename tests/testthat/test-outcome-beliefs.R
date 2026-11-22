@@ -22,18 +22,18 @@ test_that("transformed normal moments and modes are mathematically correct", {
 
 test_that("outcome quantiles mix with link beliefs and boundaries", {
   p = outcome_example()
-  p = update(p, parameter = "(Intercept)", belief(mean = 0), belief(value < plogis(1), probability = pnorm(1), scale = "probability"))
+  p = (p + update_priors(parameter = "(Intercept)", belief(mean = 0), belief(value < plogis(1), probability = pnorm(1), scale = "probability")))
   expect_equal(p$selected$`(Intercept)`$sd, 1, tolerance = 1e-8)
-  q = update(p, parameter = "(Intercept)", belief(value > plogis(2), probability = .95, scale = "probability"))
+  q = (p + update_priors(parameter = "(Intercept)", belief(value > plogis(2), probability = .95, scale = "probability")))
   expect_identical(q$candidates$`(Intercept)`$status, "contradictory")
-  q = update(outcome_example(), parameter = "(Intercept)", belief(value < 0, probability = .1, scale = "probability"))
+  q = (outcome_example() + update_priors(parameter = "(Intercept)", belief(value < 0, probability = .1, scale = "probability")))
   expect_identical(q$candidates$`(Intercept)`$status, "contradictory")
-  q = update(outcome_example(), parameter = "(Intercept)", belief(value <= 1, probability = 1, scale = "probability"))
+  q = (outcome_example() + update_priors(parameter = "(Intercept)", belief(value <= 1, probability = 1, scale = "probability")))
   expect_equal(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
-  q = update(outcome_example(), parameter = "(Intercept)", belief(value < .5, probability = 0, scale = "probability"))
+  q = (outcome_example() + update_priors(parameter = "(Intercept)", belief(value < .5, probability = 0, scale = "probability")))
   expect_identical(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
   p = outcome_example(poisson())
-  p = update(p, parameter = "(Intercept)", belief(mean = log(3)), belief(value <= 6, probability = .95, scale = "response"))
+  p = (p + update_priors(parameter = "(Intercept)", belief(mean = log(3)), belief(value <= 6, probability = .95, scale = "response")))
   expect_equal(p$selected$`(Intercept)`$sd, log(2) / qnorm(.95), tolerance = 1e-8)
 })
 
@@ -43,8 +43,8 @@ test_that("nonlinear outcome modes and moments fit and export link priors", {
     scale = if (family$family == "binomial") "probability" else "response"
     target = if (scale == "probability") .7 else 3
     threshold = if (scale == "probability") .9 else 6
-    p = update(p, parameter = "(Intercept)", do.call(belief, list(mode = target, scale = scale)),
-      belief(value < threshold, probability = .95, scale = scale))
+    p = (p + update_priors(parameter = "(Intercept)", do.call(belief, list(mode = target, scale = scale)),
+      belief(value < threshold, probability = .95, scale = scale)))
     expect_equal(p$candidates$`(Intercept)`$status, "selected")
     expect_equal(p$candidates$`(Intercept)`$achieved, c(target, .95), tolerance = 1e-6)
     expect_equal(as_rstanarm(p)$prior_intercept$dist, "normal")
@@ -72,17 +72,17 @@ test_that("nonlinear outcome modes and moments fit and export link priors", {
 
 test_that("nonlinear transformed means and SDs fit without naive transforms", {
   p = outcome_example(poisson())
-  q = update(p, parameter = "(Intercept)", belief(mean = 3, scale = "response"), belief(sd = 1, scale = "response"))
+  q = (p + update_priors(parameter = "(Intercept)", belief(mean = 3, scale = "response"), belief(sd = 1, scale = "response")))
   expected_sd = sqrt(log1p(1 / 9))
   expect_equal(q$selected$`(Intercept)`$mean, log(3) - expected_sd^2 / 2, tolerance = 1e-6)
   expect_equal(q$selected$`(Intercept)`$sd, expected_sd, tolerance = 1e-6)
   expect_false(q$candidates$`(Intercept)`$alternatives$student_t$valid)
   expect_match(q$candidates$`(Intercept)`$alternatives$student_t$message, "no finite positive moments")
   p = outcome_example()
-  q = update(p, parameter = "(Intercept)", belief(mean = .3), belief(sd = .1, scale = "probability"))
+  q = (p + update_priors(parameter = "(Intercept)", belief(mean = .3), belief(sd = .1, scale = "probability")))
   expect_equal(q$selected$`(Intercept)`$mean, .3, tolerance = 1e-6)
   expect_equal(prior_distribution_target(q$beliefs$`(Intercept)`[[2]], q$selected$`(Intercept)`), .1, tolerance = 1e-6)
-  q = update(p, parameter = "(Intercept)", belief(mean = .7, scale = "probability"))
+  q = (p + update_priors(parameter = "(Intercept)", belief(mean = .7, scale = "probability")))
   expect_true(q$candidates$`(Intercept)`$reference_used)
   expect_equal(q$candidates$`(Intercept)`$achieved, .7, tolerance = 1e-6)
   expect_true(is.finite(prior_distribution_target(belief(sd = .1, scale = "probability"), list(distribution = "student_t", location = 0, scale = 1, df = 7))))
@@ -90,28 +90,28 @@ test_that("nonlinear transformed means and SDs fit without naive transforms", {
 
 test_that("outcome domains, unsupported modes and removal are explicit", {
   p = outcome_example()
-  expect_error(update(p, parameter = "x", belief(mean = .7, scale = "probability")), "intercept only")
-  expect_error(update(p, parameter = "(Intercept)", belief(mean = 1, scale = "probability")), "strictly inside")
-  expect_error(update(p, parameter = "(Intercept)", belief(sd = .5, scale = "probability")), "below 0.5")
-  expect_error(update(p, parameter = "(Intercept)", belief(value < -1, probability = .5, scale = "probability")), "in ")
-  expect_error(update(p, parameter = "(Intercept)", belief(mean = 3, scale = "response")), "family")
-  q = update(p, parameter = "(Intercept)", belief(mode = .7, scale = "probability"))
+  expect_error((p + update_priors(parameter = "x", belief(mean = .7, scale = "probability"))), "intercept only")
+  expect_error((p + update_priors(parameter = "(Intercept)", belief(mean = 1, scale = "probability"))), "strictly inside")
+  expect_error((p + update_priors(parameter = "(Intercept)", belief(sd = .5, scale = "probability"))), "below 0.5")
+  expect_error((p + update_priors(parameter = "(Intercept)", belief(value < -1, probability = .5, scale = "probability"))), "in ")
+  expect_error((p + update_priors(parameter = "(Intercept)", belief(mean = 3, scale = "response"))), "family")
+  q = (p + update_priors(parameter = "(Intercept)", belief(mode = .7, scale = "probability")))
   expect_identical(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
   expect_match(q$candidates$`(Intercept)`$message, "Add an SD or informative quantile")
   expect_match(q$candidates$`(Intercept)`$alternatives$student_t$message, "global mode")
-  q = update(q, parameter = "(Intercept)", remove = 1)
+  q = (q + update_priors(parameter = "(Intercept)", remove = 1))
   expect_equal(q$selected$`(Intercept)`, p$defaults$`(Intercept)`)
   p = outcome_example(poisson())
-  expect_error(update(p, parameter = "(Intercept)", belief(mean = 0, scale = "response")), "positive")
-  expect_error(update(p, parameter = "(Intercept)", belief(value < -1, probability = .5, scale = "response")), "positive")
-  q = update(outcome_example(), parameter = "(Intercept)", belief(mean = .7, scale = "probability", tolerance = 1e-10))
+  expect_error((p + update_priors(parameter = "(Intercept)", belief(mean = 0, scale = "response"))), "positive")
+  expect_error((p + update_priors(parameter = "(Intercept)", belief(value < -1, probability = .5, scale = "response"))), "positive")
+  q = (outcome_example() + update_priors(parameter = "(Intercept)", belief(mean = .7, scale = "probability", tolerance = 1e-10)))
   expect_identical(q$selected$`(Intercept)`, q$defaults$`(Intercept)`)
   expect_match(q$candidates$`(Intercept)`$message, "numerical evaluation")
 })
 
 test_that("redundant outcome beliefs preserve reference anchoring and diagnostics", {
   p = outcome_example()
-  p = update(p, parameter = "(Intercept)", belief(mean = .7, scale = "probability"), belief(mean = .7, scale = "probability"))
+  p = (p + update_priors(parameter = "(Intercept)", belief(mean = .7, scale = "probability"), belief(mean = .7, scale = "probability")))
   expect_true(p$candidates$`(Intercept)`$reference_used)
   expect_length(p$candidates$`(Intercept)`$achieved, 2)
   expect_equal(p$selected$`(Intercept)`$sd, p$defaults$`(Intercept)`$sd)
@@ -120,7 +120,7 @@ test_that("redundant outcome beliefs preserve reference anchoring and diagnostic
 
 test_that("general nonlinear rank deficiency remains explicit", {
   p = outcome_example()
-  p = update(p, parameter = "(Intercept)", belief(mean = 0), belief(mean = .5, scale = "probability"))
+  p = (p + update_priors(parameter = "(Intercept)", belief(mean = 0), belief(mean = .5, scale = "probability")))
   expect_identical(p$selected$`(Intercept)`, p$defaults$`(Intercept)`)
   expect_match(p$candidates$`(Intercept)`$message, "Underidentified nonlinear")
 })
@@ -133,7 +133,7 @@ test_that("fitting outcome beliefs forwards only selected link-scale priors", {
     original = p$model$data
     scale = if (family$family == "binomial") "probability" else "response"
     target = if (scale == "probability") .7 else 3
-    p = update(p, parameter = "(Intercept)", do.call(belief, list(mean = target, scale = scale)))
+    p = (p + update_priors(parameter = "(Intercept)", do.call(belief, list(mean = target, scale = scale))))
     expect_s3_class(fit(p, chains = 2), "stanreg")
     expect_equal(captured$args$data, original)
     expect_equal(unname(captured$args$prior_intercept$location), p$selected$`(Intercept)`$mean)

@@ -1,10 +1,12 @@
-#' Compose parameter-specific prior beliefs
+#' Incorporate parameter or expected-outcome beliefs
 #'
 #' Construct a reusable specification and add it to a prior object with `+`.
 #' Specifications do not fit distributions until applied. Addition delegates to
-#' the same machinery as update(), preserving existing beliefs and diagnostics.
-#' Expected-outcome specifications can be added with update_outcome(); these
-#' reconcile jointly and may explicitly relax coefficient beliefs. Updating a
+#' the existing parameter-fitting or joint-reconciliation machinery, preserving
+#' existing beliefs and diagnostics.
+#' Supply exactly one target: parameter for an individual prior, or outcome for
+#' the conditional expected response at specified predictor values. Outcome
+#' beliefs reconcile jointly and may explicitly relax coefficient beliefs. Updating a
 #' coefficient recomputes reconciliation from its coefficient-only baseline.
 #' Chain updates as `priors + update_priors(...) + update_priors(...)`.
 #' Use this interface to add, remove or replace beliefs. Removal positions refer
@@ -19,52 +21,125 @@
 #' specifications are not combined independently of a prior object.
 #'
 #' @param parameter One exact parameter name, as displayed by the prior object.
+#'   May also be supplied as the first unnamed argument.
+#' @param outcome Named list with one finite numeric value for every predictor.
+#'   Beliefs concern the conditional expected response, not individual noisy
+#'   observations. For an intercept-only model use list(). Supply either this
+#'   argument or parameter, never both. Control argument names must match exactly.
 #' @param ... Objects constructed by belief(). May be empty for removal-only updates.
 #' @param remove Unique positive integer positions of existing beliefs to remove.
 #'   Defaults to integer() (none). Positions must be in range when applied.
+#'   Only parameter targets support removal; do not supply remove with outcome.
+#' @section Expected-outcome reconciliation:
+#' Initially supports Gaussian identity models with an intercept,
+#' numeric predictors, and selected independent Normal coefficient priors.
+#' Student's t coefficient priors, categorical predictors and offsets are
+#' unsupported. Sigma priors can be elicited separately with update_priors();
+#' expected-outcome reconciliation never adjusts sigma. The existing centered
+#' intercept is retained; independence refers to that parameterization.
+#'
+#' Reconciliation has three priorities: satisfy outcome beliefs within their
+#' tolerances; minimize the largest coefficient-belief violation beyond its
+#' tolerance in dimensionless coordinates; then minimize
+#' KL(adjusted prior || baseline prior). Locations and SDs use baseline-SD
+#' units; probabilities use probit (standard-Normal quantile) distances outside
+#' their original probability tolerance bands. Numerical tolerances determine
+#' satisfaction, not the relative importance of beliefs. Defaults enter
+#' only the last tier. Compatibility checks first derive Normal moment
+#' acceptance bounds and test nonnegative coefficient-variance restrictions.
+#' A verified separating certificate establishes incompatibility; a failed
+#' numerical search alone does not. Passing these necessary checks does not
+#' prove full joint feasibility. All answers are retained when either check
+#' or reconciliation fails. This is a deterministic constrained numerical search,
+#' not a guarantee of global optimality. An unverified solution is never exported.
+#' Original coefficient-only selections define the baseline on every update,
+#' preventing successive outcome additions from moving the baseline.
+#'
+#' The default belief tolerance remains 1e-6, including for currency-valued
+#' locations. For a price estimate stated to the nearest 10000, an explicit
+#' tolerance=5000 may describe reporting precision. This is different from the
+#' uncertainty expressed by a probability belief. Record such precision as part
+#' of the interview, not as a way to force incompatible answers to fit.
+#' Probability targets of 0 or 1 use their declared positive acceptance bands;
+#' a finite Normal distribution cannot attain those probabilities exactly.
+#'
+#' The fixed-variance Mahalanobis projection initializes the numerical search.
+#' Positive affine changes of simple numeric predictor units preserve the
+#' centered independent-Normal structure. Equivalent targets, thresholds and
+#' absolute tolerances give equivalent reconciliations up to numerical accuracy.
+#' This does not extend to transformations mixing coefficient columns and
+#' inducing covariance. Outcome unit changes must transform tolerances too.
+#' General reconciliation may change both means and SDs. Underidentified problems
+#' are resolved by the stated preference criterion, not by claiming identification.
+#' Relaxed coefficient beliefs produce a warning and remain visible in
+#' summary(..., diagnostics=TRUE). Incompatible or numerically unresolved outcome
+#' specifications are retained but block check_prior(), as_rstanarm(), as_brms()
+#' and fit() unless retained fallback priors are explicitly approved.
 #' @return update_priors() returns a flexbayes_prior_update specification.
 #'   Adding it to a flexbayes_priors object returns a revised prior object.
 #'   Neither input is modified. Unsupported or incompatible beliefs retain the
-#'   same unresolved status as with update(); no constraints are discarded.
+#'   existing failure diagnostics and fallback safeguards; no constraints are discarded.
 #' @examples
-#' change = update_priors("x", belief(mode = 3), belief(sd = 1))
+#' change = update_priors(parameter = "x", belief(mode = 3), belief(sd = 1))
 #' removal = update_priors("x", remove = 2)
 #' replacement = update_priors("x", belief(sd = .5), remove = 2)
+#' expected = update_priors(outcome = list(x = 2), belief(mode = 10),
+#'   belief(value < 8, probability = .05))
 #' \dontrun{
 #' priors = identify_priors(y ~ x + z, data = d) +
 #'   change +
 #'   update_priors("z", belief(mode = -1))
 #' }
 #' @export
-update_priors = function(parameter, ..., remove = integer()) {
-  if (!is.character(parameter) || length(parameter) != 1L || is.na(parameter) || !nzchar(parameter)) stop("parameter must be one nonempty parameter name.")
+update_priors = function(..., parameter = NULL, outcome = NULL, remove = integer()) {
   beliefs = list(...)
+  has_parameter = !missing(parameter)
+  has_outcome = !missing(outcome)
+
+  # All control arguments match exactly after dots. Recognize only the leading
+  # unnamed parameter shorthand; outcome calls keep every belief in dots.
+  unnamed_first = length(beliefs) && (is.null(names(beliefs)) || !nzchar(names(beliefs)[1]))
+  positional = unnamed_first && (is.character(beliefs[[1]]) ||
+    (!has_parameter && !has_outcome && !inherits(beliefs[[1]], "prior_belief")))
+  if (positional) {
+    if (has_parameter) stop("Supply parameter only once, either positionally or by name.")
+    parameter = beliefs[[1]]
+    beliefs = beliefs[-1]
+    has_parameter = TRUE
+  }
+  if (has_parameter == has_outcome) stop("Supply exactly one of parameter or outcome, using exact argument names.")
+  if (has_outcome) {
+    if (!missing(remove)) stop("remove applies only to parameter beliefs; outcome removal is not supported.")
+    specification = prior_outcome_update(outcome, beliefs)
+    return(structure(c(list(target = "outcome"), specification), class = "flexbayes_prior_update"))
+  }
+
+  if (!is.character(parameter) || length(parameter) != 1L || is.na(parameter) || !nzchar(parameter)) stop("parameter must be one nonempty parameter name.")
   prior_validate_removals(remove)
   if (!length(beliefs) && !length(remove)) stop("Supply at least one belief() object or removal index.")
   if (any(!vapply(beliefs, inherits, logical(1), "prior_belief"))) stop("All additions must be belief objects.")
-  structure(list(parameter = parameter, beliefs = beliefs, remove = remove), class = "flexbayes_prior_update")
+  structure(list(target = "parameter", parameter = parameter, beliefs = beliefs, remove = remove), class = "flexbayes_prior_update")
 }
 
 #' @export
 `+.flexbayes_priors` = function(e1, e2) {
   if (missing(e2)) stop("Use priors + update_priors(...); unary + is not supported.")
-  if (inherits(e1, "flexbayes_priors") && inherits(e2, "flexbayes_outcome_update")) return(prior_apply_outcome(e1, e2))
   if (!inherits(e1, "flexbayes_priors") || !inherits(e2, "flexbayes_prior_update")) {
     stop("Use a flexbayes_priors object on the left and an update_priors() specification on the right.")
   }
 
+  if (identical(e2$target, "outcome")) return(prior_apply_outcome(e1, e2))
+  if (!identical(e2$target, "parameter")) stop("Unknown update target; construct a specification with update_priors().")
+
   # Unname the list so a belief argument cannot masquerade as parameter/remove.
-  remove = if ("remove" %in% names(e2)) e2$remove else integer()
-  do.call(stats::update, c(list(object = e1, parameter = e2$parameter, remove = remove), unname(e2$beliefs)))
+  remove = e2$remove
+  do.call(prior_apply_parameter, c(list(object = e1, parameter = e2$parameter, remove = remove), unname(e2$beliefs)))
 }
 
 # Use the identical method for right-hand dispatch as well, so unsupported
 # operands receive the same error and our two classes cannot conflict in Ops.
 #' @export
 `+.flexbayes_prior_update` = `+.flexbayes_priors`
-
-#' @export
-`+.flexbayes_outcome_update` = `+.flexbayes_priors`
 
 # A specification has no belief-list length yet; application checks its bounds.
 prior_validate_removals = function(remove, count = NULL) {

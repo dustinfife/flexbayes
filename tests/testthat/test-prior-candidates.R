@@ -19,7 +19,7 @@ test_that("registry validates and evaluates supported distributions", {
 
 test_that("both candidate families fit moments with fixed df and stable ranking", {
   p = prior_example()
-  p = update(p, parameter = "x", belief(mean = 2), belief(sd = 3))
+  p = (p + update_priors(parameter = "x", belief(mean = 2), belief(sd = 3)))
   a = p$candidates$x$alternatives
   expect_true(a$normal$valid)
   expect_true(a$student_t$valid)
@@ -29,13 +29,13 @@ test_that("both candidate families fit moments with fixed df and stable ranking"
   expect_equal(p$selected$x$distribution, "normal")
   expect_equal(p$candidates$x$mathematical, p$selected$x)
   expect_true(p$backend$compatible)
-  p = update(p, parameter = "x", remove = 2)
+  p = (p + update_priors(parameter = "x", remove = 2))
   expect_true(p$candidates$x$alternatives$student_t$reference_used)
 })
 
 student_beliefs = function(p, parameter) {
-  update(p, parameter = parameter, belief(mean = 0), belief(sd = sqrt(7 / 5)),
-    belief(value < 1, probability = pt(1, 7)))
+  (p + update_priors(parameter = parameter, belief(mean = 0), belief(sd = sqrt(7 / 5)),
+    belief(value < 1, probability = pt(1, 7))))
 }
 
 test_that("t-only candidates select when compatible and preserve other defaults", {
@@ -63,7 +63,7 @@ test_that("t-only candidates select when compatible and preserve other defaults"
 
 test_that("candidate plots compare valid densities and remain ggplots", {
   p = prior_example()
-  p = update(p, parameter = "x", belief(mean = 0), belief(sd = 1))
+  p = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = 1)))
   plot = plot(p, parameter = "x")
   expect_s3_class(plot + ggplot2::theme_bw(), "ggplot")
   expect_equal(length(unique(plot$data$Candidate)), 2)
@@ -81,12 +81,12 @@ test_that("backend choice is separate from mathematical rank", {
   # x is restored automatically after gb changes.
   expect_true(p$backend$compatible)
   expect_equal(p$selected$x$distribution, "student_t")
-  q = update(p, parameter = "x", remove = 3)
+  q = (p + update_priors(parameter = "x", remove = 3))
   expect_equal(q$candidates$x$mathematical$distribution, "normal")
   expect_equal(q$selected$x$distribution, "student_t")
   expect_equal(q$candidates$x$rank, 2L)
   expect_equal(q$selected$gb, p$selected$gb)
-  restored = update(p, parameter = "x", remove = 1:3)
+  restored = (p + update_priors(parameter = "x", remove = 1:3))
   expect_identical(restored$selected, p$selected)
   expect_identical(restored$candidates$x$status, "backend_incompatible")
   expect_true(restored$backend$compatible)
@@ -111,7 +111,7 @@ test_that("whole-model selections recover in either update order", {
     # A default reset cannot discard the other slope's valid t prior.
     # Retain the coherent collection until that reset can be represented.
     selected = p$selected
-    p = update(p, parameter = order[2], remove = 1:3)
+    p = (p + update_priors(parameter = order[2], remove = 1:3))
     expect_true(p$backend$compatible)
     expect_identical(p$selected, selected)
     expect_identical(p$candidates[[order[2]]]$status, "backend_incompatible")
@@ -123,7 +123,7 @@ test_that("whole-model selections recover in either update order", {
 
 test_that("automatic alternatives reselect globally while preserving rankings", {
   base = prior_example()
-  p = update(base, parameter = "x", belief(mean = 0), belief(sd = 1))
+  p = (base + update_priors(parameter = "x", belief(mean = 0), belief(sd = 1)))
   rankings = p$candidates$x$alternatives
   mathematical = p$candidates$x$mathematical
   p = student_beliefs(p, "gb")
@@ -131,13 +131,13 @@ test_that("automatic alternatives reselect globally while preserving rankings", 
   expect_equal(p$selected$x$distribution, "student_t")
   expect_equal(p$candidates$x$alternatives, rankings)
   expect_equal(p$candidates$x$mathematical, mathematical)
-  p = update(p, parameter = "gb", remove = 1:3)
+  p = (p + update_priors(parameter = "gb", remove = 1:3))
   expect_true(p$backend$compatible)
   expect_equal(p$selected$x$distribution, "normal")
   expect_equal(p$candidates$x$alternatives, rankings)
   # Contradictory updates also refresh compatibility without fitting them.
-  p = update(p, parameter = "gb", belief(value < 0, probability = .95),
-    belief(value > 1, probability = .95))
+  p = (p + update_priors(parameter = "gb", belief(value < 0, probability = .95),
+    belief(value > 1, probability = .95)))
   expect_identical(p$candidates$gb$status, "contradictory")
   expect_null(p$candidates$gb$alternatives)
   expect_true(p$backend$compatible)
@@ -145,7 +145,7 @@ test_that("automatic alternatives reselect globally while preserving rankings", 
 
 test_that("Student t tail policy is centralized and fixed", {
   expect_identical(prior_student_t_policy()$df, 7)
-  p = update(prior_example(), parameter = "x", belief(mean = 0))
+  p = (prior_example() + update_priors(parameter = "x", belief(mean = 0)))
   candidate = p$candidates$x$alternatives$student_t$distribution
   expect_equal(candidate$df, prior_student_t_policy()$df)
   expect_equal(prior_distribution_operation(candidate, "sd"), p$defaults$x$sd)
@@ -153,7 +153,7 @@ test_that("Student t tail policy is centralized and fixed", {
 
 test_that("individual prior plots render all parameters or one parameter independently of checks", {
   p = prior_example()
-  p = update(p, parameter = "x", belief(mean = 0), belief(sd = 1))
+  p = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = 1)))
   before = p
   all_plot = plot(p)
   single_plot = plot(p, parameter = "x")

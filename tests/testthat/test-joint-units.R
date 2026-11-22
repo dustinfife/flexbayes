@@ -20,7 +20,7 @@ joint_unit_example = function(area=1,years=1,currency=1,shift=0,offset=0,scaled_
     update_priors("(Intercept)",belief(mode=250000*currency+offset,tolerance=tol[1]),
       belief(value<1000*currency+offset,probability=.00001))
   at = list(sqft=3000/area+shift,age=30/years+shift,bedrooms=3)
-  spec = update_outcome(at,belief(mode=450000*currency+offset,tolerance=1e-6*currency),
+  spec = update_priors(outcome = at,belief(mode=450000*currency+offset,tolerance=1e-6*currency),
     belief(value<350000*currency+offset,probability=.05))
   q = suppressWarnings(p+spec)
   list(p=p,q=q,spec=spec,factors=factors,offset=offset,area=area,years=years,
@@ -77,7 +77,7 @@ test_that("Ames reconciliation is invariant to area, age and currency units", {
 test_that("dimensionless minimax agrees with a location-only analytic bound", {
   p = joint_example()
   for (name in colnames(p$model$X)) p = p + update_priors(name,belief(mean=0))
-  q = suppressWarnings(p+update_outcome(list(x=6,z=1),belief(mean=20)))
+  q = suppressWarnings(p+update_priors(outcome = list(x=6,z=1),belief(mean=20)))
   expect_identical(q$joint$status,"reconciled")
   row = c(1,6-mean(p$model$data$x),1-mean(p$model$data$z))
   baseline_sd = vapply(p$selected[1:3],`[[`,numeric(1),"sd")
@@ -89,13 +89,13 @@ test_that("dimensionless minimax agrees with a location-only analytic bound", {
   expect_gte(max(q$joint$coefficient$normalized_violation),bound-1e-8)
   expect_lte(max(q$joint$coefficient$normalized_violation),bound*(1+1.01e-6)+1e-9)
   expect_equal(vapply(q$selected[1:3],`[[`,numeric(1),"sd"),baseline_sd,tolerance=1e-10)
-  expect_identical(suppressWarnings(p+update_outcome(list(x=6,z=1),belief(mean=20))),q)
+  expect_identical(suppressWarnings(p+update_priors(outcome = list(x=6,z=1),belief(mean=20))),q)
 })
 
 test_that("probability sacrifices are probit distances beyond actual acceptance bands", {
   p = joint_example(y~1) + update_priors("(Intercept)",belief(mean=0),belief(sd=1),
     belief(value<qnorm(1e-9),probability=1e-9,tolerance=1e-12))
-  q = suppressWarnings(p+update_outcome(list(),belief(mode=1)))
+  q = suppressWarnings(p+update_priors(outcome = list(),belief(mode=1)))
   expect_identical(q$joint$status,"reconciled")
   selected = q$selected$`(Intercept)`
   achieved = pnorm(qnorm(1e-9),selected$mean,selected$sd)
@@ -109,7 +109,7 @@ test_that("probability sacrifices are probit distances beyond actual acceptance 
   expect_equal(row$discrepancy,achieved-1e-9)
   # If an absolute probability tolerance reaches 0/1, the acceptance band is
   # one-sided on the probit scale, without clipping the target probability.
-  baseline = p; baseline$outcomes = list(unclass(update_outcome(list(),belief(mean=1))))
+  baseline = p; baseline$outcomes = list(unclass(update_priors(outcome = list(),belief(mean=1))))
   baseline$beliefs$`(Intercept)`[[3]]$tolerance = 1e-6
   problem = prior_joint_problem(baseline)
   metric = prior_joint_coefficient_metric(c(1,0),problem)
@@ -136,7 +136,7 @@ test_that("KL preference accounts for both mean and variance changes in the stat
   expect_true(all(q$joint$outcome$satisfied))
   # In a convex location-only benchmark, changed SD starts converge to the
   # same analytic KL projection. General probability problems remain local.
-  initial = joint_example()+update_outcome(list(x=6,z=1),belief(mean=20))
+  initial = joint_example()+update_priors(outcome = list(x=6,z=1),belief(mean=20))
   problem = initial$joint$problem
   a = prior_joint_solve(rep(0,6),problem,tier=1L)
   b = prior_joint_solve(c(rep(.2,3),rep(.3,3)),problem,tier=1L)
@@ -147,7 +147,7 @@ test_that("KL preference accounts for both mean and variance changes in the stat
 test_that("reconciled priors preserve compatible anchors, diagnostics, sampling and export", {
   p = joint_example()+update_priors("x",belief(mean=0))
   at = list(x=mean(p$model$data$x),z=mean(p$model$data$z))
-  q = p+update_outcome(at,belief(mean=p$selected$`(Intercept)`$mean))
+  q = p+update_priors(outcome = at,belief(mean=p$selected$`(Intercept)`$mean))
   expect_equal(q$selected,p$selected,tolerance=1e-12)
   expect_true(all(q$joint$coefficient$satisfied))
   fixture = joint_unit_example(); q = fixture$q
@@ -190,7 +190,7 @@ test_that("standardized beliefs retain entered-unit diagnostic discrepancies", {
   p = joint_example(y~x) + update_priors("x",belief(mean=.5,scale="standardized"),
     belief(sd=.1,scale="standardized")) +
     update_priors("(Intercept)",belief(mean=0),belief(sd=1))
-  q = suppressWarnings(p+update_outcome(list(x=6),belief(mean=30)))
+  q = suppressWarnings(p+update_priors(outcome = list(x=6),belief(mean=30)))
   expect_identical(q$joint$status,"reconciled")
   factor = p$beliefs$x[[1]]$standardization_factor
   record = q$joint$coefficient[q$joint$coefficient$id==p$beliefs$x[[1]]$id,]
@@ -208,17 +208,17 @@ test_that("outcome conflict certificates do not depend on currency units", {
     p = joint_example()
     p$model$data$y = p$model$data$y*unit
     p = identify_priors(y~x+z,p$model$data)
-    q = p+update_outcome(list(x=6,z=1),belief(mean=20*unit,tolerance=1e-6*unit))
-    expect_warning({conflict = q+update_outcome(list(x=6,z=1),
+    q = p+update_priors(outcome = list(x=6,z=1),belief(mean=20*unit,tolerance=1e-6*unit))
+    expect_warning({conflict = q+update_priors(outcome = list(x=6,z=1),
       belief(mean=10*unit,tolerance=1e-6*unit))},"incompatible")
     expect_identical(conflict$joint$status,"incompatible")
     # Multiple beliefs at a configuration must not confuse record indices
     # with configuration indices when scaling the conflict certificate.
     p$outcomes = list(
-      unclass(update_outcome(list(x=6,z=1),belief(mean=20*unit),
+      unclass(update_priors(outcome = list(x=6,z=1),belief(mean=20*unit),
         belief(value<15*unit,probability=.05))),
-      unclass(update_outcome(list(x=1,z=0),belief(mean=0,tolerance=1e-6*unit))),
-      unclass(update_outcome(list(x=1,z=0),belief(mean=10*unit,tolerance=1e-6*unit))))
+      unclass(update_priors(outcome = list(x=1,z=0),belief(mean=0,tolerance=1e-6*unit))),
+      unclass(update_priors(outcome = list(x=1,z=0),belief(mean=10*unit,tolerance=1e-6*unit))))
     expect_match(prior_joint_conflict(prior_joint_problem(p)),"incompatible")
   }
 })
@@ -227,7 +227,7 @@ test_that("zero-sacrifice compatibility and unused backend defaults survive unit
   for (unit in c(1,1000)) {
     d = data.frame(x=(1:6)/unit+7,z=rep(0:1,3),y=c(2,4,3,7,6,10))
     p = identify_priors(y~x+z,d)+update_priors("x",belief(mode=0,tolerance=1e-6*unit))
-    q = p+update_outcome(list(x=6/unit+7,z=.5),belief(mean=20))
+    q = p+update_priors(outcome = list(x=6/unit+7,z=.5),belief(mean=20))
     expect_identical(q$joint$status,"compatible")
     expect_true(all(q$joint$coefficient$satisfied))
     expect_lte(abs(q$selected$x$mean)/unit,1e-6)

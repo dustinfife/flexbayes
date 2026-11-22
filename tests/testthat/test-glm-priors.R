@@ -39,9 +39,9 @@ test_that("GLM prediction inverse links and sampling are exact and reproducible"
   for (family in list(binomial(), poisson())) {
     p = glm_prior_example(family)
     # Moderate priors avoid the deliberately guarded Poisson extreme tail.
-    p = update(p, parameter = "(Intercept)", belief(mean = 0), belief(sd = .2))
-    p = update(p, parameter = "x", belief(mean = .1), belief(sd = .1))
-    p = update(p, parameter = "gb", belief(mean = 0), belief(sd = .1))
+    p = (p + update_priors(parameter = "(Intercept)", belief(mean = 0), belief(sd = .2)))
+    p = (p + update_priors(parameter = "x", belief(mean = .1), belief(sd = .1)))
+    p = (p + update_priors(parameter = "gb", belief(mean = 0), belief(sd = .1)))
     set.seed(51)
     a = check_prior(p, 10)
     set.seed(51)
@@ -68,18 +68,18 @@ test_that("GLM prediction inverse links and sampling are exact and reproducible"
 test_that("GLM beliefs retain link scale and compatibility rules", {
   for (family in list(binomial(), poisson())) {
     p = glm_prior_example(family)
-    q = update(p, parameter = "x", belief(mode = .5), belief(sd = .2))
+    q = (p + update_priors(parameter = "x", belief(mode = .5), belief(sd = .2)))
     expect_equal(q$selected$x$mean, .5)
     expect_equal(unname(as_rstanarm(q)$prior$location[1]), .5)
-    expect_error(update(p, parameter = "x", belief(mean = 1, scale = "standardized")), "Gaussian-style full standardization")
+    expect_error((p + update_priors(parameter = "x", belief(mean = 1, scale = "standardized"))), "Gaussian-style full standardization")
     expect_error(plot(p, parameter = "x", scale = "standardized"), "Gaussian-style")
-    t = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
+    t = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7))))
     expect_identical(t$candidates$x$status, "backend_incompatible")
     expect_error(as_rstanarm(t), "backend_incompatible.*allow_fallback")
-    t = update(t, parameter = "gb", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
+    t = (t + update_priors(parameter = "gb", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7))))
     expect_equal(t$selected$x$distribution, "student_t")
     expect_equal(as_rstanarm(t)$prior$dist, "t")
-    bad = update(p, parameter = "x", belief(value < 0, probability = .95), belief(value > 1, probability = .95))
+    bad = (p + update_priors(parameter = "x", belief(value < 0, probability = .95), belief(value > 1, probability = .95)))
     expect_error(check_prior(bad), "contradictory")
     expect_error(as_rstanarm(bad), "contradictory")
   }

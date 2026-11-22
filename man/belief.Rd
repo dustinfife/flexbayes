@@ -42,8 +42,7 @@ researcher's uncertainty. See "Matching an answer" below.}
 parameter restrictions described below.}
 }
 \value{
-A \code{prior_belief} record that can be supplied to \code{\link[=update_priors]{update_priors()}},
-\code{\link[=update.flexbayes_priors]{update()}}, or \code{\link[=update_outcome]{update_outcome()}}.
+A \code{prior_belief} record that can be supplied to \code{\link[=update_priors]{update_priors()}}.
 }
 \description{
 Describe what you believe using familiar quantities: a mean, a most likely
@@ -78,8 +77,8 @@ The comparison itself is captured, and its original expression is retained.
 \subsection{Combining beliefs}{
 
 \code{belief()} records a statement; it does not fit a distribution by itself.
-Add statements to an identified prior object with \code{\link[=update_priors]{update_priors()}}, or
-use \code{\link[=update.flexbayes_priors]{update()}} to revise existing beliefs. Adding beliefs
+Add, remove or replace statements on an identified prior object with
+\code{\link[=update_priors]{update_priors()}}. Adding beliefs
 keeps earlier ones. To remove a belief, use its current displayed number
 within the parameter's belief list.
 
@@ -122,7 +121,7 @@ and log-rates for Poisson coefficients. Gaussian \code{sigma} beliefs describe
 the residual standard deviation in response units. An intercept refers to the
 recorded model-matrix centering values when the model has an intercept.
 For example, \code{belief(mode = 3)} can describe a Gaussian slope.
-With \code{update_outcome()}, this same scale refers to expected-response
+With \code{update_priors(outcome = ...)}, this same scale refers to expected-response
 units at the specified predictor values instead.}
 \item{\code{"standardized"}}{A fully standardized Gaussian identity-model
 slope: \code{beta_star = beta * sd(x) / sd(y)}. For example,
@@ -209,7 +208,7 @@ reconciliation never changes an elicited or default sigma prior.
 
 \subsection{Beliefs about expected outcomes}{
 
-Supply the same \code{belief()} records to \code{\link[=update_outcome]{update_outcome()}} to describe a
+Supply the same \code{belief()} records to \code{\link[=update_priors]{update_priors()}} with outcome to describe a
 conditional expected response at a chosen predictor configuration. This
 currently requires a Gaussian identity model with an intercept, numeric
 predictors, and independent Normal coefficient priors. Only original-scale
@@ -217,7 +216,7 @@ mean, mode, and probability beliefs are supported there, not SD beliefs.
 These statements concern the expected response, not an individual noisy
 observation. Reconciliation can change coefficient priors and compromise
 earlier coefficient beliefs; their original statements remain available.
-See \code{\link[=update_outcome]{update_outcome()}} for the reconciliation priorities and limitations.
+See \code{\link[=update_priors]{update_priors()}} for the reconciliation priorities and limitations.
 }
 }
 \examples{
@@ -258,8 +257,8 @@ if (requireNamespace("rstanarm", quietly = TRUE) &&
 
   # Describe the expected response at x = 4, excluding observation noise.
   outcome_priors = identify_priors(y ~ x, data = d) +
-    update_outcome(
-      at = list(x = 4),
+    update_priors(
+      outcome = list(x = 4),
       belief(mode = 650),
       belief(value < 550, probability = .05)
     )

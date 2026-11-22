@@ -8,7 +8,7 @@ test_that("feasible single modes preserve actual backend spread", {
     p = single_mode_example()
     reference = p$defaults$`(Intercept)`
     expect_true(any(grepl("\\(Intercept\\).*Backend default", capture.output(print(p)))))
-    q = update(p, parameter = "(Intercept)", belief(mode = target, scale = "probability"))
+    q = (p + update_priors(parameter = "(Intercept)", belief(mode = target, scale = "probability")))
     expect_equal(q$selected$`(Intercept)`$sd, reference$sd)
     expect_equal(q$selected$`(Intercept)`$mean, qlogis(target) - reference$sd^2 * (2 * target - 1))
     expect_equal(prior_logit_normal_mode(q$selected$`(Intercept)`$mean, reference$sd), target, tolerance = 1e-8)
@@ -23,7 +23,7 @@ test_that("feasible single modes preserve actual backend spread", {
 test_that("infeasible or competing global modes remain unresolved", {
   for (target in c(.5, .7, .95, .05)) {
     p = single_mode_example()
-    q = update(p, parameter = "(Intercept)", belief(mode = target, scale = "probability"))
+    q = (p + update_priors(parameter = "(Intercept)", belief(mode = target, scale = "probability")))
     expect_identical(q$selected$`(Intercept)`, p$defaults$`(Intercept)`)
     expect_identical(q$candidates$`(Intercept)`$status, "no_supported_fit")
     expect_match(q$candidates$`(Intercept)`$message, "Add an SD or informative quantile")
@@ -37,7 +37,7 @@ test_that("infeasible or competing global modes remain unresolved", {
 
 test_that("boundary modes and small-spread unimodality are checked", {
   p = single_mode_example()
-  for (target in c(0, 1)) expect_error(update(p, parameter = "(Intercept)", belief(mode = target, scale = "probability")), "strictly inside")
+  for (target in c(0, 1)) expect_error((p + update_priors(parameter = "(Intercept)", belief(mode = target, scale = "probability"))), "strictly inside")
   r = belief(mode = .7, scale = "probability")
   reference = list(distribution = "normal", mean = 0, sd = .8)
   fit = prior_fit_single_probability_mode(r, reference)

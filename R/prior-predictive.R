@@ -9,7 +9,8 @@
 #' Reconciled outcome priors use the same simulation machinery. Use
 #' response='expected' to examine beliefs without individual residual noise;
 #' simulated outcomes additionally use the selected residual-scale prior.
-#' update_outcome() never changes sigma; update_priors() can elicit it separately.
+#' Expected-outcome updates never change sigma; update_priors(parameter = 'sigma',
+#' ...) can elicit it separately.
 #' @param object A flexbayes_priors object.
 #' @param allow_fallback Use retained priors despite unsuccessful elicitation?
 #'   Defaults to FALSE. TRUE explicitly approves their use and issues a warning;

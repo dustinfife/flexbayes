@@ -9,7 +9,7 @@ vignette: >
 
 ## Supported distribution and parameterization
 
-`update_outcome()` reconciles beliefs about a Gaussian conditional expected
+`update_priors(outcome = ...)` reconciles beliefs about a Gaussian conditional expected
 response, not individual observations. The initial scope is identity-link
 regression with an intercept, numeric predictors, and independent Normal
 coefficient priors. Existing coefficient-only candidate selection runs first;

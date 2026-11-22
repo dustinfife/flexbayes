@@ -211,7 +211,7 @@ $$
 \end{align}
 $$
 
-Of course, *you* don't have to do this. Instead, you can use the `update_outcome` function with the same `homes_2024` dataset we've been using.
+Of course, *you* don't have to do this. Instead, you can give `update_priors()` an `outcome` list rather than a parameter name, using the same `homes_2024` dataset we've been using.
 
 ```{r}
 priors = identify_priors(
@@ -220,12 +220,12 @@ priors = identify_priors(
   family = gaussian(),
   package = "rstanarm"
 ) +
-  update_outcome(
-    at = list(sqft = 1200, bedrooms = 2, age = 10),
+  update_priors(
+    outcome = list(sqft = 1200, bedrooms = 2, age = 10),
     belief(mode = 250000)
   ) +
-  update_outcome(
-    at = list(sqft = 1200, bedrooms = 2, age = 30),
+  update_priors(
+    outcome = list(sqft = 1200, bedrooms = 2, age = 30),
     belief(mode = 195000)
   ) 
 
@@ -245,17 +245,17 @@ Assuming the agent said yes, we could specify that belief in R:
 
 ```{r}
 priors = priors +
-  update_outcome(
-    at = list(sqft = 1200, bedrooms = 3, age = 10),
+  update_priors(
+    outcome = list(sqft = 1200, bedrooms = 3, age = 10),
     belief(value < 230000, probability = .10),
     belief(value > 270000, probability = .10)
   )
 priors
 ```
 
-> **Quick sidenote:** There's a subtle distinction we need to make when using `update_outcome()` to express uncertainty. You may recall from introductory stats that a confidence interval is different from a prediction interval. A confidence interval describes uncertainty about a parameter (such as a regression coefficient or an expected outcome), while a prediction interval describes uncertainty about an individual observation.
+> **Quick sidenote:** There's a subtle distinction we need to make when using `update_priors(outcome = ...)` to express uncertainty. You may recall from introductory stats that a confidence interval is different from a prediction interval. A confidence interval describes uncertainty about a parameter (such as a regression coefficient or an expected outcome), while a prediction interval describes uncertainty about an individual observation.
 >
-> We have a similar distinction in Bayesian statistics. When we use `update_outcome()`, we're specifying beliefs about the *expected outcome* for a particular combination of predictor values, not the range of individual outcomes we might observe.
+> We have a similar distinction in Bayesian statistics. When we use `update_priors(outcome = ...)`, we're specifying beliefs about the *expected outcome* for a particular combination of predictor values, not the range of individual outcomes we might observe.
 >
 > For example, suppose we're talking about houses with three bedrooms, 1,700 square feet, and an age of 10 years. Consider these two questions:
 >
@@ -263,9 +263,9 @@ priors
 >
 > - **Expected outcome:** "How confident are you that the *average selling price* for houses like this is above \$350,000?"
 >
-> The first question concerns variation among individual house sales. The second concerns uncertainty about the average selling price. It's the second kind of belief that `update_outcome()` currently supports.
+> The first question concerns variation among individual house sales. The second concerns uncertainty about the average selling price. It's the second kind of belief that `update_priors(outcome = ...)` currently supports.
 
-As before, you can chain beliefs together with `update_outcome` as well. What's really cool is that each update doesn't replace the existing priors. Instead, you're simply giving the computer more constraints (or, you might say, more *direction)* when estimating priors. The computer will then prioritize the constraints imposed by `update_outcome` over those obtained with `update_priors`. But what happens when our priors conflict with one another?
+As before, you can chain beliefs together with `update_priors(outcome = ...)` as well. What's really cool is that each update doesn't replace the existing priors. Instead, you're simply giving the computer more constraints (or, you might say, more *direction)* when estimating priors. The computer will then prioritize the constraints imposed by `update_priors(outcome = ...)` over parameter beliefs supplied with `update_priors(parameter = ...)`. But what happens when our priors conflict with one another?
 
 Let's actually take a look at an example of this happening. Let's start with adding priors on the parameters:
 
@@ -298,17 +298,17 @@ priors = identify_priors(
   )
 ```
 
-Now let's go ahead and add priors using `update_outcome`. Maybe we go back and pester our real estate friend again. This time we ask her to estimate the price of two homes; both have 3 bedrooms and are 10 years old, but one is 1500 square feet and the other is 1700. She prices the first at \$450k and the second at \$425k. Let's go ahead and set that up.
+Now let's go ahead and add priors using `update_priors(outcome = ...)`. Maybe we go back and pester our real estate friend again. This time we ask her to estimate the price of two homes; both have 3 bedrooms and are 10 years old, but one is 1500 square feet and the other is 1700. She prices the first at \$450k and the second at \$425k. Let's go ahead and set that up.
 
 ```{r}
 # add outcome beliefs that conflict with the sqft belief
 priors = priors +
-  update_outcome(
-    at = list(sqft = 1700, age = 10, bedrooms = 3),
+  update_priors(
+    outcome = list(sqft = 1700, age = 10, bedrooms = 3),
     belief(mode = 450000)
   ) +
-  update_outcome(
-    at = list(sqft = 1500, age = 10, bedrooms = 3),
+  update_priors(
+    outcome = list(sqft = 1500, age = 10, bedrooms = 3),
     belief(mode = 425000)
   )
 ```
@@ -327,9 +327,9 @@ Fortunately, `flexbayes` knows how to handle this. It prioritizes our beliefs ab
 priors
 ```
 
-Notice the `sqft` estimate from the `update_outcome` approach superseded the priors from the `update_priors` approach. Our `sqft` originally was \$212, but now it's \$125. `age` also changed from -\$2,750 to -\$4,504.88. (Apparently, I suck at estimating priors on a parameter). `bedrooms` also changed from \$25,000 \$24,804.33.
+Notice the `sqft` estimate from the `update_priors(outcome = ...)` approach superseded the priors from the `update_priors(parameter = ...)` approach. Our `sqft` originally was \$212, but now it's \$125. `age` also changed from -\$2,750 to -\$4,504.88. (Apparently, I suck at estimating priors on a parameter). `bedrooms` also changed from \$25,000 \$24,804.33.
 
-In my experience, eliciting priors using the `update_outcome` approach is very good at identifying means of parameters, but sometimes a little awkward for eliciting standard deviations, so using both `update_priors` and `update_outcome` is probably best.
+In my experience, eliciting priors using the `update_priors(outcome = ...)` approach is very good at identifying means of parameters, but sometimes a little awkward for eliciting standard deviations, so combining parameter and outcome beliefs with `update_priors()` is probably best.
 
 ## Specifying Priors for `sigma`
 
@@ -480,7 +480,7 @@ Well, we revise them! That's really the point of doing prior predictive checks i
 
 Maybe our prior for square footage is too uncertain. Maybe we've specified an intercept that doesn't make sense. Or maybe our prior for `sigma` allows far more unexplained variation than we actually believe is plausible.
 
-Whatever the problem, we can go back to our `update_priors()` or `update_outcome()` functions, revise our beliefs, and run another predictive check.
+Whatever the problem, we can go back to our `update_priors()` function, revise our beliefs, and run another predictive check.
 
 One word of caution, though: **we shouldn't change our priors just because they don't match the data we've collected.** That would rather defeat the purpose of specifying priors in the first place. Instead, we should be asking whether the predictions make sense given what we knew about the problem *before* examining the outcome data.
 

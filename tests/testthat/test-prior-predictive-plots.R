@@ -5,7 +5,7 @@ renderer_check = function(family = gaussian(), formula = y ~ x + z + g) {
   if (family$family == "gaussian") d$y = 10 + d$x + d$z + rep(c(-1, 1), 18)
   if (family$family == "poisson") d$y = rep(0:3, 9)
   p = identify_priors(formula, d, family)
-  for (name in setdiff(names(p$selected), "sigma")) p = update(p, parameter = name, belief(mean = 0), belief(sd = .1))
+  for (name in setdiff(names(p$selected), "sigma")) p = (p + update_priors(parameter = name, belief(mean = 0), belief(sd = .1)))
   set.seed(882)
   check_prior(p, 40)
 }

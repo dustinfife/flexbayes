@@ -8,10 +8,10 @@ interview_example = function(area_unit=1,currency=1) {
 }
 
 interview_beliefs = function(area_unit=1,currency=1,second_lower=400000,tolerance=1e-6*currency,probability_tolerance=1e-6) {
-  list(update_outcome(list(sqft=1500/area_unit,age=30,bedrooms=3),
+  list(update_priors(outcome = list(sqft=1500/area_unit,age=30,bedrooms=3),
       belief(mode=300000*currency,tolerance=tolerance),
       belief(value<250000*currency,probability=.05,tolerance=probability_tolerance)),
-    update_outcome(list(sqft=3000/area_unit,age=30,bedrooms=3),
+    update_priors(outcome = list(sqft=3000/area_unit,age=30,bedrooms=3),
       belief(mode=500000*currency,tolerance=tolerance),
       belief(value<second_lower*currency,probability=.05,tolerance=probability_tolerance)))
 }
@@ -105,7 +105,7 @@ test_that("nonnegative variance certificates detect conflicts requiring three co
   specs = lapply(seq_along(c(-1,0,2)),function(i) {
     coordinate = c(-1,0,2)[i]+mean(p$model$data$x)
     threshold = 10+qnorm(.05)*sqrt(c(2,1,3)[i])
-    update_outcome(list(x=coordinate),belief(mode=10,tolerance=1e-8),
+    update_priors(outcome = list(x=coordinate),belief(mode=10,tolerance=1e-8),
       belief(value<threshold,probability=.05,tolerance=1e-8))
   })
   problem = compatibility_problem(p,specs)
@@ -123,28 +123,28 @@ test_that("nonnegative variance certificates detect conflicts requiring three co
   # whereas the answers require 3. Every pair separately passes ratio bounds.
   expect_equal(4*2-3*1,5)
   compatible = specs
-  compatible[[3]] = update_outcome(list(x=2+mean(p$model$data$x)),belief(mode=10),
+  compatible[[3]] = update_priors(outcome = list(x=2+mean(p$model$data$x)),belief(mode=10),
     belief(value<10+qnorm(.05)*sqrt(5),probability=.05))
   expect_null(prior_joint_compatibility(compatibility_problem(p,compatible)))
 })
 
 test_that("Normal-only probability conflicts and repeated configurations are diagnosed", {
   p = joint_example(y~x)
-  statements = list(update_outcome(list(x=3),belief(value<0,probability=.1)),
-    update_outcome(list(x=3),belief(value<1,probability=.5)),
-    update_outcome(list(x=3),belief(value<4,probability=.9)))
+  statements = list(update_priors(outcome = list(x=3),belief(value<0,probability=.1)),
+    update_priors(outcome = list(x=3),belief(value<1,probability=.5)),
+    update_priors(outcome = list(x=3),belief(value<4,probability=.9)))
   proof = prior_joint_compatibility(compatibility_problem(p,statements))
   expect_identical(proof$issue,"location and variance")
   expect_setequal(proof$configurations,1:3)
   expect_length(proof$records,3)
-  statements[[3]] = update_outcome(list(x=3),belief(value<2,probability=.9))
+  statements[[3]] = update_priors(outcome = list(x=3),belief(value<2,probability=.9))
   expect_null(prior_joint_compatibility(compatibility_problem(p,statements)))
-  conflict = list(update_outcome(list(x=3),belief(mode=0)),update_outcome(list(x=3),belief(mean=10)))
+  conflict = list(update_priors(outcome = list(x=3),belief(mode=0)),update_priors(outcome = list(x=3),belief(mean=10)))
   expect_identical(prior_joint_compatibility(compatibility_problem(p,conflict))$issue,"location")
 })
 
 test_that("numerical failure remains unresolved and retains every expert response", {
-  p = joint_example(); spec = update_outcome(list(x=6,z=1),belief(mean=20))
+  p = joint_example(); spec = update_priors(outcome = list(x=6,z=1),belief(mean=20))
   local_mocked_bindings(prior_joint_solve=function(...) stop("forced numerical failure"))
   expect_warning({q = p+spec},"[Nn]o mathematical incompatibility")
   expect_identical(q$joint$status,"unresolved")
@@ -199,7 +199,7 @@ test_that("known feasible Normal moments are never rejected by necessary-conditi
     sd = sqrt(as.vector(X^2%*%(spread*c(1,.3,.2,.1,.05))^2))
     specs = lapply(seq_len(nrow(at)),function(i) {
       threshold = means[i]+qnorm(.05)*sd[i]
-      update_outcome(as.list(at[i,]),belief(mean=means[i]),belief(value<threshold,probability=.05))
+      update_priors(outcome = as.list(at[i,]),belief(mean=means[i]),belief(value<threshold,probability=.05))
     })
     expect_null(prior_joint_compatibility(compatibility_problem(p,specs)))
   }
@@ -209,7 +209,7 @@ test_that("failed compatibility calculations cannot become an impossibility clai
   p = joint_example()
   local_mocked_bindings(prior_joint_compatibility=function(...) stop("forced diagnostic failure"),
     prior_joint_solve=function(...) stop("forced solver failure"))
-  expect_warning({q = p+update_outcome(list(x=6,z=1),belief(mean=20))},"[Nn]o mathematical incompatibility")
+  expect_warning({q = p+update_priors(outcome = list(x=6,z=1),belief(mean=20))},"[Nn]o mathematical incompatibility")
   expect_identical(q$joint$status,"unresolved")
   expect_null(q$joint$compatibility)
   expect_match(q$joint$compatibility_note,"forced diagnostic failure",fixed=TRUE)
@@ -218,8 +218,8 @@ test_that("failed compatibility calculations cannot become an impossibility clai
 
 test_that("nearby distinct configurations are not declared impossible by numerical rank truncation", {
   p = joint_example(y~x)
-  specs = list(update_outcome(list(x=3),belief(mean=0)),
-    update_outcome(list(x=3+1e-14),belief(mean=1)))
+  specs = list(update_priors(outcome = list(x=3),belief(mean=0)),
+    update_priors(outcome = list(x=3+1e-14),belief(mean=1)))
   problem = compatibility_problem(p,specs)
   expect_false(identical(problem$X[1,],problem$X[2,]))
   # The required slope is huge, but finite: no location contradiction follows.

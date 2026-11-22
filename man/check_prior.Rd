@@ -34,5 +34,6 @@ simulation rejects nonfinite rates or rates above 1e8.
 Reconciled outcome priors use the same simulation machinery. Use
 response='expected' to examine beliefs without individual residual noise;
 simulated outcomes additionally use the selected residual-scale prior.
-update_outcome() never changes sigma; update_priors() can elicit it separately.
+Expected-outcome updates never change sigma; update_priors(parameter = 'sigma',
+...) can elicit it separately.
 }

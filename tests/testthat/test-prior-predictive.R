@@ -58,7 +58,7 @@ test_that("newdata preserves training centering, factor levels and outcome indep
 test_that("t sampling uses selected scale and plots use the same mathematics", {
   p = prior_example()
   p = identify_priors(y ~ x, p$model$data)
-  p = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
+  p = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7))))
   set.seed(8)
   result = check_prior(p, 30)
   set.seed(8)
@@ -78,11 +78,11 @@ test_that("invalid priors and arguments fail without substitution", {
   p = prior_example()
   for (n in list(0, -1, 1.5, NA_real_, Inf, c(1, 2))) expect_error(check_prior(p, n), "positive integer")
   expect_error(check_prior(list()), "flexbayes_priors")
-  q = update(p, parameter = "x", belief(value < 0, probability = .95), belief(value > 1, probability = .95))
+  q = (p + update_priors(parameter = "x", belief(value < 0, probability = .95), belief(value > 1, probability = .95)))
   expect_error(check_prior(q), "contradictory")
-  q = update(p, parameter = "x", belief(value < 0, probability = 0))
+  q = (p + update_priors(parameter = "x", belief(value < 0, probability = 0)))
   expect_error(check_prior(q), "no_supported_fit")
-  q = update(p, parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
+  q = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7))))
   expect_error(check_prior(q), "backend_incompatible")
   q = p
   q$selected$x = NULL

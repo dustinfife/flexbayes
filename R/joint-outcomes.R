@@ -1,70 +1,9 @@
-#' Elicit the expected outcome at a predictor configuration
-#'
-#' Add this specification to an identify_priors() object with `+`. Beliefs concern
-#' the conditional expected response, excluding residual noise. The original
-#' object and coefficient belief statements are never modified in place.
-#' @param at Named list specifying one finite numeric value for every predictor.
-#'   For an intercept-only model use list().
-#' @param ... Mean, mode or probability inequality objects from belief(), using
-#'   scale="original". Multiple specifications are reconciled jointly.
-#' @details Initially supports Gaussian identity models with an intercept,
-#' numeric predictors, and selected independent Normal coefficient priors.
-#' Student's t coefficient priors, categorical predictors and offsets are
-#' unsupported. Sigma priors can be elicited separately with update_priors();
-#' expected-outcome reconciliation never adjusts sigma. The existing centered
-#' intercept is retained; independence refers to that parameterization.
-#'
-#' Reconciliation has three priorities: satisfy outcome beliefs within their
-#' tolerances; minimize the largest coefficient-belief violation beyond its
-#' tolerance in dimensionless coordinates; then minimize
-#' KL(adjusted prior || baseline prior). Locations and SDs use baseline-SD
-#' units; probabilities use probit (standard-Normal quantile) distances outside
-#' their original probability tolerance bands. Numerical tolerances determine
-#' satisfaction, not the relative importance of beliefs. Defaults enter
-#' only the last tier. Compatibility checks first derive Normal moment
-#' acceptance bounds and test nonnegative coefficient-variance restrictions.
-#' A verified separating certificate establishes incompatibility; a failed
-#' numerical search alone does not. Passing these necessary checks does not
-#' prove full joint feasibility. All answers are retained when either check
-#' or reconciliation fails. This is a deterministic constrained numerical search,
-#' not a guarantee of global optimality. An unverified solution is never exported.
-#' Original coefficient-only selections define the baseline on every update,
-#' preventing successive outcome additions from moving the baseline.
-#'
-#' The default belief tolerance remains 1e-6, including for currency-valued
-#' locations. For a price estimate stated to the nearest 10000, an explicit
-#' tolerance=5000 may describe reporting precision. This is different from the
-#' uncertainty expressed by a probability belief. Record such precision as part
-#' of the interview, not as a way to force incompatible answers to fit.
-#' Probability targets of 0 or 1 use their declared positive acceptance bands;
-#' a finite Normal distribution cannot attain those probabilities exactly.
-#'
-#' The fixed-variance Mahalanobis projection initializes the numerical search.
-#' Positive affine changes of simple numeric predictor units preserve the
-#' centered independent-Normal structure. Equivalent targets, thresholds and
-#' absolute tolerances give equivalent reconciliations up to numerical accuracy.
-#' This does not extend to transformations mixing coefficient columns and
-#' inducing covariance. Outcome unit changes must transform tolerances too.
-#' General reconciliation may change both means and SDs. Underidentified problems
-#' are resolved by the stated preference criterion, not by claiming identification.
-#' Relaxed coefficient beliefs produce a warning and remain visible in
-#' summary(..., diagnostics=TRUE). Incompatible or numerically unresolved outcome
-#' specifications are retained but block check_prior(), as_rstanarm() and fit().
-#' @return A flexbayes_outcome_update specification; addition returns revised priors.
-#' @examples
-#' change = update_outcome(at=list(x=2), belief(mode=10),
-#'   belief(value < 8, probability=.05))
-#' \dontrun{
-#' d = data.frame(x=1:6, y=c(3, 5, 4, 8, 9, 11))
-#' p = identify_priors(y ~ x, d) + change
-#' summary(p, diagnostics=TRUE)
-#' }
-#' @export
-update_outcome = function(at, ...) {
+# Validate an expected-response specification before joint reconciliation.
+prior_outcome_update = function(at, records) {
   # Validate the configuration without changing any of the supplied answers.
   if (!is.list(at) || length(at) && (is.null(names(at)) || anyNA(names(at)) ||
       any(!nzchar(names(at))) || anyDuplicated(names(at)))) {
-    stop("at must be a uniquely named list.")
+    stop("outcome must be a uniquely named list.")
   }
   if (any(!vapply(at, function(x) is.numeric(x) && !is.complex(x) && length(x) == 1L &&
       is.null(dim(x)) && is.finite(x), logical(1)))) {
@@ -72,13 +11,12 @@ update_outcome = function(at, ...) {
   }
 
   # Outcome beliefs concern expected responses, not individual observations.
-  records = list(...)
   if (!length(records) || any(!vapply(records, inherits, logical(1), "prior_belief"))) stop("Supply belief() objects.")
   if (any(!vapply(records, function(r) r$scale == "original" &&
       r$type %in% c("mean", "mode", "probability"), logical(1)))) {
     stop("Expected-outcome elicitation supports original-scale mean, mode and probability beliefs only.")
   }
-  structure(list(at = at, beliefs = unname(records)), class = "flexbayes_outcome_update")
+  list(at = at, beliefs = unname(records))
 }
 
 prior_apply_outcome = function(object, specification) {
@@ -86,7 +24,7 @@ prior_apply_outcome = function(object, specification) {
     specification$beliefs[[i]]$id = object$next_id
     object$next_id = object$next_id + 1L
   }
-  object$outcomes = c(object$outcomes, list(unclass(specification)))
+  object$outcomes = c(object$outcomes, list(list(at = specification$at, beliefs = specification$beliefs)))
   prior_select_compatible(object)
 }
 
@@ -106,7 +44,7 @@ prior_joint_design = function(object, specifications) {
   }
 
   rows = lapply(specifications, function(specification) {
-    if (!setequal(names(specification$at), variables)) stop("at must specify exactly these predictors: ", paste(variables, collapse = ", "))
+    if (!setequal(names(specification$at), variables)) stop("outcome must specify exactly these predictors: ", paste(variables, collapse = ", "))
     data = if (length(variables)) as.data.frame(specification$at) else data.frame(row.names = 1L)
     X = prior_prediction_matrix(object, data)
     slopes = setdiff(colnames(X), "(Intercept)")

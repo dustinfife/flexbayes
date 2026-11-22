@@ -5,8 +5,8 @@ brms_example = function(family = gaussian(), formula = y ~ x + z) {
   identify_priors(formula, d, family, package = "brms")
 }
 
-brms_t_beliefs = function(p, parameter) update(p, parameter = parameter,
-  belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))
+brms_t_beliefs = function(p, parameter) (p + update_priors(parameter = parameter,
+  belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7))))
 
 test_that("proper default policy is independent of fitting backend", {
   skip_if_not_installed("rstanarm")
@@ -171,9 +171,9 @@ test_that("brms preserves fallback, recovery, and outcome reconciliation", {
   expect_equal(args, as_brms(p))
   expect_warning(check_prior(q, 5, allow_fallback = TRUE), "fallback")
   expect_s3_class(plot(q), "ggplot")
-  expect_null(update(q, parameter = "sigma", remove = 2)$fallbacks$sigma)
-  b = brms_example() + update_outcome(list(x = 3, z = 0), belief(mean = 4), belief(value < 4 - qnorm(.95), probability = .05))
-  r = identify_priors(b$model$formula, b$model$data) + update_outcome(list(x = 3, z = 0), belief(mean = 4), belief(value < 4 - qnorm(.95), probability = .05))
+  expect_null((q + update_priors(parameter = "sigma", remove = 2))$fallbacks$sigma)
+  b = brms_example() + update_priors(outcome = list(x = 3, z = 0), belief(mean = 4), belief(value < 4 - qnorm(.95), probability = .05))
+  r = identify_priors(b$model$formula, b$model$data) + update_priors(outcome = list(x = 3, z = 0), belief(mean = 4), belief(value < 4 - qnorm(.95), probability = .05))
   expect_identical(b$selected, r$selected)
   expect_identical(b$selected$sigma, b$defaults$sigma)
   expect_type(do.call(brms::make_stancode, as_brms(b)), "character")
@@ -211,8 +211,8 @@ test_that("brms preserves transformed belief scales and numeric sigma failures",
     r = identify_priors(p$model$formula, p$model$data, family)
     scale = if (family$family == "binomial") "odds_ratio" else "rate_ratio"
     constraints = list(belief(value < 2, probability = .5, scale = scale), belief(value < 4, probability = .95, scale = scale))
-    b = do.call(update, c(list(p, parameter = "x"), constraints))
-    q = do.call(update, c(list(r, parameter = "x"), constraints))
+    b = (p + do.call(update_priors, c(list(parameter = "x"), constraints)))
+    q = (r + do.call(update_priors, c(list(parameter = "x"), constraints)))
     expect_identical(b$selected, q$selected)
     expect_type(do.call(brms::make_stancode, as_brms(b)), "character")
     scale = if (family$family == "binomial") "probability" else "response"
@@ -228,7 +228,7 @@ test_that("brms preserves transformed belief scales and numeric sigma failures",
   expect_identical(q$candidates$sigma$status, "no_supported_fit")
   expect_match(q$candidates$sigma$message, "does not establish mathematical incompatibility", fixed = TRUE)
   expect_warning(as_brms(q, allow_fallback = TRUE), "fallback")
-  expect_identical(update(q, parameter = "sigma", remove = 2)$selected, p$selected)
+  expect_identical((q + update_priors(parameter = "sigma", remove = 2))$selected, p$selected)
   local_mocked_bindings(prior_fit_candidates = function(...) stop("forced numerical failure"))
   q = p + update_priors("x", belief(mean = 1))
   expect_identical(q$selected, p$selected)

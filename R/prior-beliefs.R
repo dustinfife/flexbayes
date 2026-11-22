@@ -51,8 +51,8 @@
 #' ## Combining beliefs
 #'
 #' `belief()` records a statement; it does not fit a distribution by itself.
-#' Add statements to an identified prior object with [update_priors()], or
-#' use [`update()`][update.flexbayes_priors] to revise existing beliefs. Adding beliefs
+#' Add, remove or replace statements on an identified prior object with
+#' [update_priors()]. Adding beliefs
 #' keeps earlier ones. To remove a belief, use its current displayed number
 #' within the parameter's belief list.
 #'
@@ -93,7 +93,7 @@
 #'   the residual standard deviation in response units. An intercept refers to the
 #'   recorded model-matrix centering values when the model has an intercept.
 #'   For example, `belief(mode = 3)` can describe a Gaussian slope.
-#'   With `update_outcome()`, this same scale refers to expected-response
+#'   With `update_priors(outcome = ...)`, this same scale refers to expected-response
 #'   units at the specified predictor values instead.}
 #'   \item{`"standardized"`}{A fully standardized Gaussian identity-model
 #'   slope: `beta_star = beta * sd(x) / sd(y)`. For example,
@@ -180,7 +180,7 @@
 #'
 #' ## Beliefs about expected outcomes
 #'
-#' Supply the same `belief()` records to [update_outcome()] to describe a
+#' Supply the same `belief()` records to [update_priors()] with outcome to describe a
 #' conditional expected response at a chosen predictor configuration. This
 #' currently requires a Gaussian identity model with an intercept, numeric
 #' predictors, and independent Normal coefficient priors. Only original-scale
@@ -188,10 +188,9 @@
 #' These statements concern the expected response, not an individual noisy
 #' observation. Reconciliation can change coefficient priors and compromise
 #' earlier coefficient beliefs; their original statements remain available.
-#' See [update_outcome()] for the reconciliation priorities and limitations.
+#' See [update_priors()] for the reconciliation priorities and limitations.
 #'
-#' @return A `prior_belief` record that can be supplied to [update_priors()],
-#'   [`update()`][update.flexbayes_priors], or [update_outcome()].
+#' @return A `prior_belief` record that can be supplied to [update_priors()].
 #' @seealso [identify_priors()], [plot.flexbayes_priors()], [check_prior()]
 #' @examples
 #' # These are separate statements, not one combined specification.
@@ -231,8 +230,8 @@
 #'
 #'   # Describe the expected response at x = 4, excluding observation noise.
 #'   outcome_priors = identify_priors(y ~ x, data = d) +
-#'     update_outcome(
-#'       at = list(x = 4),
+#'     update_priors(
+#'       outcome = list(x = 4),
 #'       belief(mode = 650),
 #'       belief(value < 550, probability = .05)
 #'     )
@@ -380,17 +379,8 @@ prior_distribution_target = function(record, prior) {
 
 prior_fit_normal = function(records, reference) prior_fit_location_scale(records, reference, "normal")
 
-#' Revise prior beliefs
-#'
-#' Retained for backward compatibility. Prefer adding update_priors()
-#' specifications with `+` to add, remove or replace beliefs.
-#' @param object Prior specification.
-#' @param ... Belief objects.
-#' @param parameter Exact parameter name.
-#' @param remove Displayed belief numbers to remove before adding beliefs.
-#' @return A revised prior specification.
-#' @export
-update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
+# Apply parameter constraints through the existing selection and fallback path.
+prior_apply_parameter = function(object, ..., parameter, remove = integer()) {
   # Validate additions and removals before changing the returned specification.
   if (length(parameter) != 1 || !parameter %in% names(object$beliefs)) stop("Unknown parameter.")
   prior_validate_standardized_beliefs(object)

@@ -131,8 +131,8 @@ test_that("sigma failures retain beliefs and distinguish backend limits from con
   expect_identical(poor$candidates$sigma$status, "no_supported_fit")
   expect_length(poor$beliefs$sigma, 2)
   expect_match(poor$candidates$sigma$message, "does not establish mathematical incompatibility", fixed = TRUE)
-  expect_error(update(p, parameter = "sigma", belief(mean = .5, scale = "standardized")), "original")
-  expect_identical(update(mode, parameter = "sigma", remove = 1)$selected$sigma, p$defaults$sigma)
+  expect_error((p + update_priors(parameter = "sigma", belief(mean = .5, scale = "standardized"))), "original")
+  expect_identical((mode + update_priors(parameter = "sigma", remove = 1))$selected$sigma, p$defaults$sigma)
 })
 
 test_that("selected sigma drives simulation, plotting and faithful prior_aux export", {
@@ -179,12 +179,12 @@ test_that("selected sigma drives simulation, plotting and faithful prior_aux exp
 test_that("outcome reconciliation never fits or sacrifices the sigma prior", {
   p = joint_example() + update_priors("sigma", belief(mean = 4))
   before = p$selected$sigma
-  q = p + update_outcome(list(x = 6, z = 1), belief(mean = 12))
+  q = p + update_priors(outcome = list(x = 6, z = 1), belief(mean = 12))
   expect_identical(q$selected$sigma, before)
   expect_identical(q$beliefs$sigma, p$beliefs$sigma)
   expect_true(q$joint$status %in% c("compatible", "reconciled"))
   expect_no_error(check_prior(q, 10))
-  revised = update(q, parameter = "sigma", remove = 1, belief(mean = 2))
+  revised = (q + update_priors(parameter = "sigma", remove = 1, belief(mean = 2)))
   expect_identical(revised$selected$sigma, list(distribution = "exponential", rate = .5))
   expect_equal(revised$selected[names(revised$selected) != "sigma"], q$selected[names(q$selected) != "sigma"])
   expect_no_error(as_rstanarm(revised))
@@ -257,7 +257,7 @@ test_that("half-t large-df moments are stable and sigma does not change expected
 test_that("joint summaries retain sigma beliefs and non-exponential sigma selections", {
   p = joint_example() + update_priors("sigma", belief(mean = 4), belief(value < 8, probability = .95))
   before = p$selected$sigma
-  q = p + update_outcome(list(x = 6, z = 1), belief(mean = 12))
+  q = p + update_priors(outcome = list(x = 6, z = 1), belief(mean = 12))
   expect_identical(q$selected$sigma, before)
   expect_identical(q$beliefs$sigma, p$beliefs$sigma)
   text = paste(capture.output(print(summary(q))), collapse = "\n")

@@ -4,7 +4,7 @@ joint_summary_text = function(object, diagnostics=FALSE) {
 
 test_that("ordinary reconciliation summaries group changed priors and compromised beliefs", {
   p = joint_example(y~1)+update_priors("(Intercept)",belief(mean=0),belief(sd=1))
-  q = suppressWarnings(p+update_outcome(list(),belief(mean=10)))
+  q = suppressWarnings(p+update_priors(outcome = list(),belief(mean=10)))
   before = q
   text = joint_summary_text(q)
   expect_match(text,"Prior reconciliation: Successful",fixed=TRUE)
@@ -32,8 +32,8 @@ test_that("ordinary reconciliation summaries group changed priors and compromise
 
 test_that("outcome summaries show each configuration with readable values and probabilities", {
   p = joint_example()
-  q = p+update_outcome(list(x=6,z=1),belief(mode=20),belief(value<15,probability=.05)) +
-    update_outcome(list(x=1,z=0),belief(mean=0))
+  q = p+update_priors(outcome = list(x=6,z=1),belief(mode=20),belief(value<15,probability=.05)) +
+    update_priors(outcome = list(x=1,z=0),belief(mean=0))
   text = joint_summary_text(q)
   expect_match(text,"Most likely expected y",fixed=TRUE)
   expect_match(text,"P(expected y < 15)",fixed=TRUE)
@@ -52,7 +52,7 @@ test_that("outcome summaries show each configuration with readable values and pr
 test_that("compatible summaries identify unchanged priors and no compromised beliefs", {
   p = joint_example()
   q = p+update_priors("x",belief(mean=0))
-  q = q+update_outcome(list(x=mean(p$model$data$x),z=mean(p$model$data$z)),
+  q = q+update_priors(outcome = list(x=mean(p$model$data$x),z=mean(p$model$data$z)),
     belief(mean=p$selected$`(Intercept)`$mean))
   text = joint_summary_text(q)
   expect_match(text,"Successful",fixed=TRUE)
@@ -62,8 +62,8 @@ test_that("compatible summaries identify unchanged priors and no compromised bel
 })
 
 test_that("incompatible, unresolved and stale priors are not described as usable", {
-  p = joint_example()+update_outcome(list(x=6,z=1),belief(mean=20))
-  bad = suppressWarnings(p+update_outcome(list(x=6,z=1),belief(mean=0)))
+  p = joint_example()+update_priors(outcome = list(x=6,z=1),belief(mean=20))
+  bad = suppressWarnings(p+update_priors(outcome = list(x=6,z=1),belief(mean=0)))
   text = joint_summary_text(bad)
   expect_match(text,"Prior reconciliation: Incompatible",fixed=TRUE)
   expect_match(text,"Outcome beliefs satisfied: No",fixed=TRUE)
@@ -87,7 +87,7 @@ test_that("incompatible, unresolved and stale priors are not described as usable
 })
 
 test_that("joint summary auto-printing and explicit printing display exactly once", {
-  p = joint_example()+update_outcome(list(x=6,z=1),belief(mean=20))
+  p = joint_example()+update_priors(outcome = list(x=6,z=1),belief(mean=20))
   for (diagnostics in c(FALSE,TRUE)) {
     creation = capture.output({ result = withVisible(summary(p,diagnostics=diagnostics)) })
     expect_length(creation,0)
@@ -102,7 +102,7 @@ test_that("joint summary auto-printing and explicit printing display exactly onc
 test_that("one grouped comparison omits unchanged priors and satisfied beliefs", {
   p = joint_example()
   for (parameter in c("(Intercept)","x")) p = p+update_priors(parameter,belief(mode=0),belief(sd=1))
-  q = suppressWarnings(p+update_outcome(list(x=6,z=.5),belief(mean=20)))
+  q = suppressWarnings(p+update_priors(outcome = list(x=6,z=.5),belief(mean=20)))
   before = q
   rows = prior_joint_summary_comparison(q)
   expect_equal(rows[[1]],c("(Intercept)","  Prior","  Most likely value","",
@@ -133,7 +133,7 @@ test_that("grouped comparison preserves narrow-column content and small probabil
   on.exit(options(old),add=TRUE)
   p = joint_example(y~1)+update_priors("(Intercept)",belief(mean=0),belief(sd=1),
     belief(value<qnorm(.00001),probability=.00001))
-  q = suppressWarnings(p+update_outcome(list(),belief(mean=10)))
+  q = suppressWarnings(p+update_priors(outcome = list(),belief(mean=10)))
   text = capture.output(print(summary(q)))
   expect_lte(max(nchar(text)),80)
   rows = prior_joint_summary_comparison(q)
