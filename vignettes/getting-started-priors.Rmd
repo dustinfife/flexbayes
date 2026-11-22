@@ -7,7 +7,7 @@ vignette: >
   %\VignetteEngine{knitr::rmarkdown}
 editor_options: 
   markdown: 
-    wrap: 72
+    wrap: none
 ---
 
 ```{r setup, include=FALSE}
@@ -18,20 +18,11 @@ devtools::load_all()
 
 ## Why elicit priors?
 
-Let's say we're studying whether students who study longer get higher
-test scores. Let's also say that research may already suggest that
-another hour helps, though probably not by 40 points.
+Let's say we're studying whether students who study longer get higher test scores. Let's also say that research may already suggest that another hour helps, though probably not by 40 points.
 
-Those expectations can become a **prior**: what we believe about a model
-parameter before using outcome evidence to estimate it. When using
-**flexbayes**, we would state these beliefs in a convenient way, then
-the computer finds the right distribution to fit. Afterwards, we can
-examine the implication of said priors before fitting the model.
+Those expectations can become a **prior**: what we believe about a model parameter before using outcome evidence to estimate it. When using **flexbayes**, we would state these beliefs in a convenient way, then the computer finds the right distribution to fit. Afterwards, we can examine the implication of said priors before fitting the model.
 
-Let's go ahead and start with an easy example using regression. More
-specifically, we'll investigate how study hours (`x`) and additional
-practice sessions (`z`) affect test scores (`y`). Let's go ahead and
-simulate the data, just to make it easier:
+Let's go ahead and start with an easy example using regression. More specifically, we'll investigate how study hours (`x`) and additional practice sessions (`z`) affect test scores (`y`). Let's go ahead and simulate the data, just to make it easier:
 
 ```{r data}
 set.seed(2026)
@@ -44,34 +35,17 @@ d$y = 50 + 3 * d$x + 2 * d$z + rnorm(nrow(d), sd = 4)
 
 ## Identify existing priors
 
-Bayesian analysis requires priors before it can even run. For this
-reason, various packages dedicated to bayesian analysis set default
-priors. Because we're lazy data analysts, it might be a good idea to see
-what these packages would provide as priors if we did nothing. We're
-going to inspect these priors, not because we're going to use them, but
-we're going to do that so we know what priors our model requires. That's
-like half the battle.
+Bayesian analysis requires priors before it can even run. For this reason, various packages dedicated to bayesian analysis set default priors. Because we're lazy data analysts, it might be a good idea to see what these packages would provide as priors if we did nothing. We're going to inspect these priors, not because we're going to use them, but we're going to do that so we know what priors our model requires. That's like half the battle.
 
-Conveniently, we have a function called `identify_priors()` that will
-help us...er...identify priors. Go figure. This function requires the
-following arguments:
+Conveniently, we have a function called `identify_priors()` that will help us...er...identify priors. Go figure. This function requires the following arguments:
 
-- `formula`: this is the formula for the model you're going to
-  eventually use to estimate the model's parameters. This is exactly
-  what you would normally input in a regular-ole `lm` model.
+- `formula`: this is the formula for the model you're going to eventually use to estimate the model's parameters. This is exactly what you would normally input in a regular-ole `lm` model.
 
-- `data`: your dataset. Yeah, that's a pretty important thing to
-  provide.
+- `data`: your dataset. Yeah, that's a pretty important thing to provide.
 
-- `family`: This parameter specifies what distribution you're using to
-  model the outcome. For this first analysis, you can ignore this
-  argument. If you end up doing logistic regression (or poisson, or
-  gamma), you'd have to modify the family.
+- `family`: This parameter specifies what distribution you're using to model the outcome. For this first analysis, you can ignore this argument. If you end up doing logistic regression (or poisson, or gamma), you'd have to modify the family.
 
-- `package`: Eventually we're going to fit a model and feed said model
-  our priors. This argument tells R which package you're going to use to
-  fit the model. By default, this is "rstanarm". The alternative is
-  "brms".
+- `package`: Eventually we're going to fit a model and feed said model our priors. This argument tells R which package you're going to use to fit the model. By default, this is "rstanarm". The alternative is "brms".
 
 So, for our example, we might use the following:
 
@@ -84,33 +58,19 @@ priors = identify_priors(
 print(priors)
 ```
 
-Remember, the primary purpose of this function is to tell you what
-priors this sort of model expects. Each row displays:
+Remember, the primary purpose of this function is to tell you what priors this sort of model expects. Each row displays:
 
 - the parameter name
 
-- the current prior (this is what the software defaults to). Notice that
-  most of them are "Normal," meaning that it's assuming this particular
-  parameter follows a normal distribution. The first parameter (e.g.,
-  66.71 for the intercept) indicates the mean. The second indicates the
-  assumed standard deviation.
+- the current prior (this is what the software defaults to). Notice that most of them are "Normal," meaning that it's assuming this particular parameter follows a normal distribution. The first parameter (e.g., 66.71 for the intercept) indicates the mean. The second indicates the assumed standard deviation.
 
-- the source of the prior (currently all of them say "Backend default,"
-  indicating this is coming from `rstanarm`.
+- the source of the prior (currently all of them say "Backend default," indicating this is coming from `rstanarm`.
 
-- the number of `beliefs` we have specified for each parameter. All the
-  beliefs are currently zero because we haven't specified any prior
-  beliefs yet.
+- the number of `beliefs` we have specified for each parameter. All the beliefs are currently zero because we haven't specified any prior beliefs yet.
 
 ## Express beliefs
 
-So far, we've let the computer identify and specify the priors (or at
-least *provisionally* specify the priors). But we wouldn't be true
-Bayesians if we left it at that. Fortunately, we know what priors need
-to be specified (intercept, x, z, and sigma). So now begins the
-delightful task of specifying priors for these parameters. Suppose
-earlier research suggests that an extra study hour most plausibly adds 3
-points, holding practice sessions constant. We can say that directly:
+So far, we've let the computer identify and specify the priors (or at least *provisionally* specify the priors). But we wouldn't be true Bayesians if we left it at that. Fortunately, we know what priors need to be specified (intercept, x, z, and sigma). So now begins the delightful task of specifying priors for these parameters. Suppose earlier research suggests that an extra study hour most plausibly adds 3 points, holding practice sessions constant. We can say that directly:
 
 ```{r first-belief}
 priors = priors + 
@@ -118,25 +78,14 @@ priors = priors +
 print(priors)
 ```
 
-Notice the syntax: we're taking our existing `prior` object and *adding*
-to it our own personal priors. There are two functions that serve
-different purposes:
+Notice the syntax: we're taking our existing `prior` object and *adding* to it our own personal priors. There are two functions that serve different purposes:
 
-1.  The `update_priors()` function. This function, not surprisingly,
-    *updates* our existing prior object. It takes two arguments: the
-    first is a string that indicates which prior we're going to update.
-    (In this case, we're updating the prior for "x"). The second
-    argument is another function called `belief()`. Speaking of which...
-2.  The `belief()` function. This tells R what values our prior beliefs
-    actually take. In this example, we're updating our priors for `x`
-    such that the distribution of `x` has a mode of 3.\
+1.  The `update_priors()` function. This function, not surprisingly, *updates* our existing prior object. It takes two arguments: the first is a string that indicates which prior we're going to update. (In this case, we're updating the prior for "x"). The second argument is another function called `belief()`. Speaking of which...
+2.  The `belief()` function. This tells R what values our prior beliefs actually take. In this example, we're updating our priors for `x` such that the distribution of `x` has a mode of 3.\
 
 ## The `belief` Function
 
-Alright, that `belief()` function is pretty important, so I think it
-deserves its own section. And maybe an "Employee of the Month" award.
-There are essentially two ways to express beliefs. The first way is to
-explicitly state your belief about the mode, mean, or sd, like this:
+Alright, that `belief()` function is pretty important, so I think it deserves its own section. And maybe an "Employee of the Month" award. There are essentially two ways to express beliefs. The first way is to explicitly state your belief about the mode, mean, or sd, like this:
 
 - `belief(mode = 100)`
 
@@ -154,20 +103,9 @@ priors = priors +
   )
 ```
 
-The above code tells the computer that you belief your parameter for `x`
-follows a normal distribution with a mode of 3 (but, because it's
-normal, the mode is the same as the mean) and a standard deviation of
-1.2.
+The above code tells the computer that you belief your parameter for `x` follows a normal distribution with a mode of 3 (but, because it's normal, the mode is the same as the mean) and a standard deviation of 1.2.
 
-The other way to use the `belief()` function is to use probabilities.
-Let's say that specifying our prior for `z` isn't as easy as stating the
-mean (or mode) and the standard deviation of its probability density
-function. Maybe we don't know the standard deviation, but we can
-estimate probabilities. For example, we might say that we think the mode
-of `z` is 1.5, but we don't know the standard deviation. However, we
-might be confident in saying that there's only a 5% chance the the best
-value of `z` is smaller than .5. We could express that with our
-`belief()` function:
+The other way to use the `belief()` function is to use probabilities. Let's say that specifying our prior for `z` isn't as easy as stating the mean (or mode) and the standard deviation of its probability density function. Maybe we don't know the standard deviation, but we can estimate probabilities. For example, we might say that we think the mode of `z` is 1.5, but we don't know the standard deviation. However, we might be confident in saying that there's only a 5% chance the the best value of `z` is smaller than .5. We could express that with our `belief()` function:
 
 ```{r}
 priors = priors + 
@@ -177,18 +115,13 @@ priors = priors +
   )
 ```
 
-Now, we can inspect our priors object to see what probability density
-function the computer selected from that information:
+Now, we can inspect our priors object to see what probability density function the computer selected from that information:
 
 ```{r}
 priors
 ```
 
-Now that is cool! Let's walk through what we did: we told the computer
-that we think the mode is 1.5, but we didn't know what sort of standard
-deviation to specify. Instead, we told the computer that there was less
-than a 5% chance the mode was smaller than .5. In the background, the
-computer identified the appropriate distribution for us!
+Now that is cool! Let's walk through what we did: we told the computer that we think the mode is 1.5, but we didn't know what sort of standard deviation to specify. Instead, we told the computer that there was less than a 5% chance the mode was smaller than .5. In the background, the computer identified the appropriate distribution for us!
 
 ## Examine the selected prior
 
@@ -198,10 +131,7 @@ At this point, it might be nice to show the distribution of our priors:
 plot(priors)
 ```
 
-But we could also specify which parameter we want to visualize. There's
-an added benefit of doing so; it will show us alternative candidate
-distributions the computer considered. In this case, it shows both a
-normal and a t-distribution.
+But we could also specify which parameter we want to visualize. There's an added benefit of doing so; it will show us alternative candidate distributions the computer considered. In this case, it shows both a normal and a t-distribution.
 
 ```{r}
 plot(priors, parameter = "x")
@@ -209,41 +139,19 @@ plot(priors, parameter = "x")
 
 ## Specifying Priors for the Intercept.
 
-One detail deserves a bit of a pause: the intercept is *centered*. What
-does that mean? It means that the R package (rstanarm) expects the user
-to tell us what we think the *mean* of Y would be if all the predictor
-variables are at their mean. This is actually very convenient because
-then we don't have to think about what the slope of score would be if we
-studied zero hours and had zero practice sessions. (That's what we'd
-have to do if we didn't *center* the scores...which would be wildly
-inconvenient and taxing on the brain.)
+One detail deserves a bit of a pause: the intercept is *centered*. What does that mean? It means that the R package (rstanarm) expects the user to tell us what we think the *mean* of Y would be if all the predictor variables are at their mean. This is actually very convenient because then we don't have to think about what the slope of score would be if we studied zero hours and had zero practice sessions. (That's what we'd have to do if we didn't *center* the scores...which would be wildly inconvenient and taxing on the brain.)
 
-But it's even easier than that. There's this really cool property of OLS
-regression that says:
+But it's even easier than that. There's this really cool property of OLS regression that says:
 
 $$
 \bar{Y} = \bar{X}\beta 
 $$
 
-That's just a fancy way of saying that in typical regression models,
-when our predictors are all at their mean, the model must also predict
-that Y will be at its mean. Of course, that's a property of OLS, so
-there's no guarantee a Bayesian estimate will satisfy that property, but
-it still provides a convenient heuristic to use: when specifying a prior
-for the intercept, just input your best guess of the mean.
+That's just a fancy way of saying that in typical regression models, when our predictors are all at their mean, the model must also predict that Y will be at its mean. Of course, that's a property of OLS, so there's no guarantee a Bayesian estimate will satisfy that property, but it still provides a convenient heuristic to use: when specifying a prior for the intercept, just input your best guess of the mean.
 
-> **Caveat:** That introduces a bit of a caveat: rstanarm uses the
-> *observed data* summaries (means...and also standard deviations) to
-> inform the priors. That's a bit backwards and contrary to how bayesian
-> priors are supposed to be elicited, but rstanarm considers this a
-> necessary sacrifice for those instances where the user doesn't provide
-> priors. I have no strong opinions on this.
+> **Caveat:** That introduces a bit of a caveat: rstanarm uses the *observed data* summaries (means...and also standard deviations) to inform the priors. That's a bit backwards and contrary to how bayesian priors are supposed to be elicited, but rstanarm considers this a necessary sacrifice for those instances where the user doesn't provide priors. I have no strong opinions on this.
 
-We should probably also specify a prior for the standard deviation of
-the intercept prior. Again, this number is used to represent our
-uncertainty about the intercept's mode (or mean or whatever we specify).
-So maybe we decide that the mean of our intercept distribution is a test
-score of 85%. And maybe we're 90% confident the mean is at least 70%:
+We should probably also specify a prior for the standard deviation of the intercept prior. Again, this number is used to represent our uncertainty about the intercept's mode (or mean or whatever we specify). So maybe we decide that the mean of our intercept distribution is a test score of 85%. And maybe we're 90% confident the mean is at least 70%:
 
 ```{r}
 priors = priors +
@@ -256,9 +164,7 @@ priors = priors +
 
 ## What if the beliefs do not fit?
 
-Remember that, when we specify our beliefs, the computer does its best
-to find a distribution that fits those criteria. But what happens if we
-give the computer contradictory information?
+Remember that, when we specify our beliefs, the computer does its best to find a distribution that fits those criteria. But what happens if we give the computer contradictory information?
 
 ```{r contradictory}
 priors = priors + update_priors(
@@ -269,17 +175,9 @@ priors = priors + update_priors(
 summary(priors)
 ```
 
-Uh oh. We told the computer there is a 95% probability values are less
-than zero and a 95% probability values are greater than one. Those
-regions don't overlap. We're allocating 1.90 worth of probability when
-there's only one to allocate. A different distribution won't rescue
-that.
+Uh oh. We told the computer there is a 95% probability values are less than zero and a 95% probability values are greater than one. Those regions don't overlap. We're allocating 1.90 worth of probability when there's only one to allocate. A different distribution won't rescue that.
 
-flexbayes keeps these beliefs and reports the contradiction. The Source
-column now identifies the **previous elicited prior (fallback)**. That
-prior is still available to inspect, but it has not satisfied our new
-beliefs. If we had not successfully elicited a prior yet, flexbayes
-would retain the original backend default instead.
+flexbayes keeps these beliefs and reports the contradiction. The Source column now identifies the **previous elicited prior (fallback)**. That prior is still available to inspect, but it has not satisfied our new beliefs. If we had not successfully elicited a prior yet, flexbayes would retain the original backend default instead.
 
 Fortunately, it's easy to remove the contradictory statements:
 
@@ -288,47 +186,19 @@ priors = update(priors, parameter = "x", remove = c(4, 5))
 priors
 ```
 
-The remaining beliefs fit again, so Source returns to "Elicited." Other
-failures have different explanations: a supported family might not fit
-otherwise consistent beliefs, backend restrictions might block a
-candidate, or a numerical search might fail. A failed numerical search
-isn't proof that the beliefs are mathematically impossible. Use
-`summary(priors, diagnostics = TRUE)` to investigate.
+The remaining beliefs fit again, so Source returns to "Elicited." Other failures have different explanations: a supported family might not fit otherwise consistent beliefs, backend restrictions might block a candidate, or a numerical search might fail. A failed numerical search isn't proof that the beliefs are mathematically impossible. Use `summary(priors, diagnostics = TRUE)` to investigate.
 
-Retaining a prior doesn't mean approving its use. `as_rstanarm()`,
-`fit()` and `check_prior()` stop when elicitation has failed. To use the
-retained priors deliberately, pass `allow_fallback = TRUE`; you'll get a
-warning, and the unmet beliefs stay in the object. Removing or replacing
-the troublesome beliefs lets flexbayes try again. Failed outcome
-reconciliation likewise retains the previous coherent coefficient
-priors.
+Retaining a prior doesn't mean approving its use. `as_rstanarm()`, `fit()` and `check_prior()` stop when elicitation has failed. To use the retained priors deliberately, pass `allow_fallback = TRUE`; you'll get a warning, and the unmet beliefs stay in the object. Removing or replacing the troublesome beliefs lets flexbayes try again. Failed outcome reconciliation likewise retains the previous coherent coefficient priors.
 
 ## Specifying Priors Based on the Outcome
 
-Sometimes it might be a bit difficult to think in terms of parameters
-and their distributions. For example, you might be predicting the sale
-price of a house based on `age`, `sqft`, and `bedrooms`. It might be
-hard to figure out how much the price of a home drops (or increases)
-when you add a bedroom or increase square footage by one. Even with the
-help of an expert (e.g., a real estate agent), these experts might be
-hard pressed to identify how much value increases per bedrooms added
-(and what that variance might be). On the other hand, I suspect a real
-estate agent would be quite good if you instead asked questions like
-these:
+Sometimes it might be a bit difficult to think in terms of parameters and their distributions. For example, you might be predicting the sale price of a house based on `age`, `sqft`, and `bedrooms`. It might be hard to figure out how much the price of a home drops (or increases) when you add a bedroom or increase square footage by one. Even with the help of an expert (e.g., a real estate agent), these experts might be hard pressed to identify how much value increases per bedrooms added (and what that variance might be). On the other hand, I suspect a real estate agent would be quite good if you instead asked questions like these:
 
-- What would be the average price of a house that is 1200 square feet, 2
-  bedrooms, and was built 10 years ago?
+- What would be the average price of a house that is 1200 square feet, 2 bedrooms, and was built 10 years ago?
 
-- What about a house that is 1200 square feet, 2 bedrooms, but was built
-  30 years ago?
+- What about a house that is 1200 square feet, 2 bedrooms, but was built 30 years ago?
 
-I'm guessing a good real estate agent would be able to give you an
-estimate. Suppose, for this example, the first house is estimated to
-sell around \$250,000, while the second house is estimate to sell around
-\$195,000. But notice what we did there: in our question, we kept square
-footage and bedrooms constant, while changing the age from 10 to 30. We
-could then take the real estate agent's guesses and convert that into a
-slope:
+I'm guessing a good real estate agent would be able to give you an estimate. Suppose, for this example, the first house is estimated to sell around \$250,000, while the second house is estimate to sell around \$195,000. But notice what we did there: in our question, we kept square footage and bedrooms constant, while changing the age from 10 to 30. We could then take the real estate agent's guesses and convert that into a slope:
 
 $$
 \begin{align}
@@ -338,10 +208,7 @@ $$
 \end{align}
 $$
 
-Of course, *you* don't have to do this. Instead, you can use the
-`update_outcome` function. To demonstrate, we'll use the `homes_2024`
-dataset that contains the sale prices/characteristics of homes in 2024
-from a county in New Jersey.
+Of course, *you* don't have to do this. Instead, you can use the `update_outcome` function. To demonstrate, we'll use the `homes_2024` dataset that contains the sale prices/characteristics of homes in 2024 from a county in New Jersey.
 
 ```{r}
 data(homes_2024)
@@ -368,16 +235,9 @@ priors = identify_priors(
 priors
 ```
 
-Not surprisingly, our mean estimate of the slope of age is 2750. (That's
-a relief. I did the math in my head).
+Not surprisingly, our mean estimate of the slope of age is 2750. (That's a relief. I did the math in my head).
 
-Unfortunately, this only tells us where the prior distribution should be
-centered. It doesn't tell us how uncertain we should be. So we decide to
-be a little sly and ask the real estate agent another question: "You
-estimated that the average selling price for a ten-year-old home would
-be \$250,000. But how confident are you in that estimate? For example,
-would you be 80% confident that the *true average selling price* is
-somewhere between \$230,000 and \$270,000?"
+Unfortunately, this only tells us where the prior distribution should be centered. It doesn't tell us how uncertain we should be. So we decide to be a little sly and ask the real estate agent another question: "You estimated that the average selling price for a ten-year-old home would be \$250,000. But how confident are you in that estimate? For example, would you be 80% confident that the *true average selling price* is somewhere between \$230,000 and \$270,000?"
 
 ```{r}
 priors = priors +
@@ -389,43 +249,21 @@ priors = priors +
 priors
 ```
 
-> **Quick sidenote:** There's a subtle distinction we need to make when
-> using `update_outcome()` to express uncertainty. You may recall from
-> introductory statistics that a confidence interval is different from a
-> prediction interval. A confidence interval describes uncertainty about
-> a parameter (such as a regression coefficient or an expected outcome),
-> whereas a prediction interval describes uncertainty about an
-> individual observation.
+> **Quick sidenote:** There's a subtle distinction we need to make when using `update_outcome()` to express uncertainty. You may recall from introductory statistics that a confidence interval is different from a prediction interval. A confidence interval describes uncertainty about a parameter (such as a regression coefficient or an expected outcome), whereas a prediction interval describes uncertainty about an individual observation.
 >
-> We have a similar distinction in Bayesian statistics. When we use
-> `update_outcome()`, we're specifying beliefs about the *expected
-> outcome* for a particular combination of predictor values, not the
-> range of individual outcomes we might observe.
+> We have a similar distinction in Bayesian statistics. When we use `update_outcome()`, we're specifying beliefs about the *expected outcome* for a particular combination of predictor values, not the range of individual outcomes we might observe.
 >
-> For example, suppose we're talking about houses with three bedrooms,
-> 1,700 square feet, and an age of 10 years. Consider these two
-> questions:
+> For example, suppose we're talking about houses with three bedrooms, 1,700 square feet, and an age of 10 years. Consider these two questions:
 >
-> - **Individual outcomes:** "If 100 houses like this sold, how many
->   would sell for less than \$350,000?"
+> - **Individual outcomes:** "If 100 houses like this sold, how many would sell for less than \$350,000?"
 >
-> - **Expected outcome:** "How confident are you that the *average
->   selling price* for houses like this is above \$350,000?"
+> - **Expected outcome:** "How confident are you that the *average selling price* for houses like this is above \$350,000?"
 >
-> The first question concerns variation among individual house sales.
-> The second concerns uncertainty about the average selling price. It's
-> the second kind of belief that `update_outcome()` currently supports.
+> The first question concerns variation among individual house sales. The second concerns uncertainty about the average selling price. It's the second kind of belief that `update_outcome()` currently supports.
 
-As before, you can chain beliefs together with `update_outcome` as well.
-What's really cool is that each update doesn't replace the existing
-priors. Instead, you're simply giving the computer more constraints (or,
-you might say, more *direction)* when estimating priors. The computer
-will then prioritize the constraints imposed by `update_outcome` over
-those obtained with `update`. But what happens when our priors conflict
-with one another?
+As before, you can chain beliefs together with `update_outcome` as well. What's really cool is that each update doesn't replace the existing priors. Instead, you're simply giving the computer more constraints (or, you might say, more *direction)* when estimating priors. The computer will then prioritize the constraints imposed by `update_outcome` over those obtained with `update`. But what happens when our priors conflict with one another?
 
-Let's actually take a look at an example of this happening. Let's start
-with adding priors on the parameters:
+Let's actually take a look at an example of this happening. Let's start with adding priors on the parameters:
 
 ```{r}
 priors = identify_priors(
@@ -456,12 +294,7 @@ priors = identify_priors(
   )
 ```
 
-Now let's go ahead and add priors using `update_outcome`. Maybe we go
-back and pester our real estate friend again. This time we ask her to
-estimate the price of two homes; both have 3 bedrooms and are 10 years
-old, but one is 1500 square feet and the other is 1700. She prices the
-first at \$450k and the second at \$425k. Let's go ahead and set that
-up.
+Now let's go ahead and add priors using `update_outcome`. Maybe we go back and pester our real estate friend again. This time we ask her to estimate the price of two homes; both have 3 bedrooms and are 10 years old, but one is 1500 square feet and the other is 1700. She prices the first at \$450k and the second at \$425k. Let's go ahead and set that up.
 
 ```{r}
 # add outcome beliefs that conflict with the sqft belief
@@ -476,10 +309,7 @@ priors = priors +
   )
 ```
 
-We get a warning message! Why? Earlier, we told `flexbayes` that each
-additional square foot should increase the expected price by \$212. But
-our real estate agent's estimates imply an increase of only \$125 per
-square foot:
+We get a warning message! Why? Earlier, we told `flexbayes` that each additional square foot should increase the expected price by \$212. But our real estate agent's estimates imply an increase of only \$125 per square foot:
 
 $$
 \beta_{\text{sqft}} =\frac{450{,}000 - 425{,}000}{1{,}700 - 1{,}500}= \$125 \text{ per square foot}
@@ -487,53 +317,27 @@ $$
 
 Both can't be right.
 
-Fortunately, `flexbayes` knows how to handle this. It prioritizes our
-beliefs about the expected outcomes and tries to adjust the coefficient
-priors while preserving as much of our original beliefs as possible.
-Let's see what happens:
+Fortunately, `flexbayes` knows how to handle this. It prioritizes our beliefs about the expected outcomes and tries to adjust the coefficient priors while preserving as much of our original beliefs as possible. Let's see what happens:
 
 ```{r}
 priors
 ```
 
-Notice the sqft estimate from the `update_outcome` approach superseded
-the priors from the `update_priors` approach. Our sqft originally was
-\$212, but now it's \$125. Age also changed from -\$2,750 to
--\$4,504.88. (Apparently, I suck at estimating priors on a parameter).
-Bedrooms also changed from \$25,000 \$24,804.33.
+Notice the sqft estimate from the `update_outcome` approach superseded the priors from the `update_priors` approach. Our sqft originally was \$212, but now it's \$125. Age also changed from -\$2,750 to -\$4,504.88. (Apparently, I suck at estimating priors on a parameter). Bedrooms also changed from \$25,000 \$24,804.33.
 
-In my experience, eliciting priors using the `update_outcome` approach
-is very good at identifying means of parameters, but sometimes a little
-awkward for eliciting standard deviations, so using both `update` and
-`update_outcome` is probably best.
+In my experience, eliciting priors using the `update_outcome` approach is very good at identifying means of parameters, but sometimes a little awkward for eliciting standard deviations, so using both `update` and `update_outcome` is probably best.
 
 ## Specifying Priors for Sigma
 
-We've now specified priors for the intercept and slopes of our
-regression model. But there's one parameter we've been neglecting:
-`sigma`. And it's actually a pretty important one.
+We've now specified priors for the intercept and slopes of our regression model. But there's one parameter we've been neglecting: `sigma`. And it's actually a pretty important one.
 
-Remember, regression models don't predict outcomes perfectly. Even if
-two houses have exactly the same square footage, age, and number of
-bedrooms, they probably won't sell for exactly the same price. There are
-lots of reasons for this: maybe one house has a nicer kitchen, maybe one
-has a swimming pool, or maybe the buyer just really, *really* liked the
-color of the bathroom.
+Remember, regression models don't predict outcomes perfectly. Even if two houses have exactly the same square footage, age, and number of bedrooms, they probably won't sell for exactly the same price. There are lots of reasons for this: maybe one house has a nicer kitchen, maybe one has a swimming pool, or maybe the buyer just really, *really* liked the color of the bathroom.
 
-This unexplained variation is represented by a parameter called $\sigma$
-(sigma). More specifically, sigma is the standard deviation of the
-residuals. If $\sigma = \$30,000$, that means approximately 68% of
-houses would sell within \$30,000 of their expected price (assuming
-normally distributed residuals).
+This unexplained variation is represented by a parameter called $\sigma$ (sigma). More specifically, sigma is the standard deviation of the residuals. If $\sigma = \$30,000$, that means approximately 68% of houses would sell within \$30,000 of their expected price (assuming normally distributed residuals).
 
-But remember, we're Bayesians now. We don't know what the value of sigma
-is, so we need to specify a *prior distribution* for it. In other words,
-we need to express our uncertainty about how much unexplained variation
-there is.
+But remember, we're Bayesians now. We don't know what the value of sigma is, so we need to specify a *prior distribution* for it. In other words, we need to express our uncertainty about how much unexplained variation there is.
 
-Let's say we believe the residual standard deviation is probably around
-\$30,000. We could specify that belief just like we did for our other
-parameters:
+Let's say we believe the residual standard deviation is probably around \$30,000. We could specify that belief just like we did for our other parameters:
 
 ```{r}
 priors = identify_priors(
@@ -550,26 +354,15 @@ priors = identify_priors(
 summary(priors)
 ```
 
-Notice that `flexbayes` selected a Gamma distribution. Don't worry if
-you've never heard of that distribution. That's the whole point of
-`flexbayes`: *you* tell the computer what you believe, and *it* figures
-out which distribution to use.
+Notice that `flexbayes` selected a Gamma distribution. Don't worry if you've never heard of that distribution. That's the whole point of `flexbayes`: *you* tell the computer what you believe, and *it* figures out which distribution to use.
 
-But there's a problem. We told the computer the most likely value of
-sigma, but we didn't say anything about how uncertain we are. Is
-\$60,000 a plausible value? What about \$100,000? We haven't told the
-computer, so it has to make some assumptions of its own.
+But there's a problem. We told the computer the most likely value of sigma, but we didn't say anything about how uncertain we are. Is \$60,000 a plausible value? What about \$100,000? We haven't told the computer, so it has to make some assumptions of its own.
 
-And those assumptions can have some pretty dramatic consequences. In
-this example, the computer selects a distribution with a mode of
-\$30,000, but a mean of nearly \$150,000! That's probably not what we
-had in mind.
+And those assumptions can have some pretty dramatic consequences. In this example, the computer selects a distribution with a mode of \$30,000, but a mean of nearly \$150,000! That's probably not what we had in mind.
 
-So let's give the computer a little more information. Suppose we're
-willing to say there's only a 5% chance the residual standard deviation
-exceeds \$60,000:
+So let's give the computer a little more information. Suppose we're willing to say there's only a 5% chance the residual standard deviation exceeds \$60,000:
 
-```{r}    
+```{r}
 priors = priors +
   update_priors(
     "sigma",
@@ -579,365 +372,112 @@ priors = priors +
 summary(priors)
 ```
 
-Now look what happens! The computer still selects a Gamma distribution,
-but this time the mode is \$30,000, the mean is approximately \$35,200,
-and the standard deviation of our *prior for sigma* is around \$13,500.
+Now look what happens! The computer still selects a Gamma distribution, but this time the mode is \$30,000, the mean is approximately \$35,200, and the standard deviation of our *prior for sigma* is around \$13,500.
 
 Let's actually take a look at that distribution:
 
-```{r}       
+```{r}
 plot(priors, parameter = "sigma")
 ```
 
-That seems much more reasonable. We've told the computer that \$30,000
-is our best guess, but we've also specified how plausible we think
-larger values are.
+That seems much more reasonable. We've told the computer that \$30,000 is our best guess, but we've also specified how plausible we think larger values are.
 
-There's one distinction worth emphasizing here. The standard deviation
-of our **prior for sigma** is not the same as sigma itself. Sigma tells
-us how much *individual house prices* vary around their expected values.
-The standard deviation of the prior tells us how uncertain we are about
-*that amount of variation*. It's a standard deviation for a standard
-deviation. (Statistics is fun, isn't it?)
+There's one distinction worth emphasizing here. The standard deviation of our **prior for sigma** is not the same as sigma itself. Sigma tells us how much *individual house prices* vary around their expected values. The standard deviation of the prior tells us how uncertain we are about *that amount of variation*. It's a standard deviation for a standard deviation. (Statistics is fun, isn't it?)
 
 One final detail: we're using `brms` here because it supports more flexible priors for sigma. For example, `rstanarm` doesn't support any sigma-prior distributions whose most likely value is greater than zero. So if we tried `belief(mode = 30000)` with `rstanarm`, `flexbayes` would tell us that it couldn't satisfy our belief. We could instead specify `belief(mean = 30000)`, which `rstanarm` can accommodate using an exponential distribution. But remember, the mean and mode are not the same thing! So which backend we choose can affect which beliefs we're able to express.
 
-Now, at this point, if you're anything like me, you're deeply skeptical
-of your own priors. Like...what if my priors make no sense whatsoever?
-What if my prior suggests a \$400k house is actually worth pennies?
-Fortunately, we have another tool at our disposal.
+Now, at this point, if you're anything like me, you're deeply skeptical of your own priors. Like...what if my priors make no sense whatsoever? What if my prior suggests a \$400k house is actually worth pennies? Fortunately, we have another tool at our disposal.
 
-```{r outcome-beliefs}
-# houses = data.frame(
-#   sqft = c(1200, 1800, 2100, 2500, 3000, 3300),
-#   age = c(40, 20, 30, 10, 5, 25),
-#   bedrooms = c(2, 3, 3, 4, 4, 5),
-#   price = c(180000, 250000, 290000, 340000, 430000, 450000)
-# )
-# house_priors = identify_priors(price ~ sqft + age + bedrooms, houses)
-# reconciled = house_priors + update_outcome(
-#   at = list(sqft = 3000, age = 30, bedrooms = 3),
-#   belief(mode = 450000),
-#   belief(value < 350000, probability = .05)
-# )
-# summary(reconciled)
+## Checking Our Priors
+
+Now that we've spent all this time specifying priors, we should probably check whether they make any sense. After all, just because we told the computer that we think a particular coefficient has a mean of 212 and a standard deviation of 50 doesn't mean we've specified a reasonable model. It's entirely possible that our individual priors seem reasonable, but when we combine them, they produce some pretty ridiculous predictions.
+
+Fortunately, there's a way to check this. It's called a **prior predictive check**.
+
+The idea is pretty simple: we ask the computer to generate predictions using our priors *before* fitting the model. More specifically, the computer: 1. randomly draws values for each model parameter from its prior distribution, uses those values to make predictions, and then repeats this process a bunch of times. This gives us an idea of what sorts of outcomes our priors suggest are plausible.
+
+We can do this with the `check_prior()` function:
+
+```{r}
+set.seed(123)
+check = check_prior(priors, n = 1000)
+
+plot(check)
 ```
 
-These beliefs describe the **expected price** for that house. They do
-not include the extra variation among individual sale prices. The
-probability statement constrains uncertainty about that expected price;
-it can change coefficient SDs as well as their means. The residual-scale
-prior stays the same. Add another `update_outcome()` to describe another
-house; all outcome specifications are reconciled together against the
-original coefficient priors, rather than successively replacing them.
+The `n = 1000` argument tells the computer to draw 1,000 sets of parameters from our prior distributions. Notice that we haven't actually fitted a model yet. These are predictions based entirely on our priors, not on estimates obtained from the data.
 
-The priorities are explicit: satisfy outcome beliefs within their stated
-tolerances, preserve explicitly elicited coefficient beliefs as closely
-as possible, and then minimize departure from the baseline joint prior.
-The comparison uses each coefficient's uncertainty, not its raw units,
-so switching from square feet to thousands of square feet doesn't change
-which beliefs matter most. Probability beliefs are compared in
-standard-Normal quantile units, so small tail probabilities keep their
-meaning. Numerical tolerances still decide whether each original
-statement holds. Backend defaults supply an anchor, not additional
-explicit beliefs. If a coefficient belief has to be relaxed, a warning
-says so. Its original statement is retained. `summary(reconciled)`
-compares requested and achieved outcomes, then groups each changed
-coefficient prior with the beliefs it compromised. Unchanged priors and
-satisfied beliefs stay out of the table. Add `diagnostics = TRUE` for
-the complete comparison and mathematical details. Incompatible or
-numerically unresolved outcome specifications cannot be exported or
-fitted.
+The resulting plot shows the distribution of house prices our priors consider plausible. And this is where things can get interesting. For example, suppose we see that our priors suggest a substantial number of houses could sell for *negative* amounts of money. That would be a little concerning. (Although I wouldn't object to someone paying me to take their house.)
 
-Now inspect the implications, rather than treating optimization as
-evidence that the priors are substantively sensible:
+Of course, a few unusual predictions aren't necessarily a problem. But if our priors routinely generate outcomes that seem completely unreasonable, that might be a sign we need to reconsider some of our beliefs. It could also suggest that our model isn't appropriate for the outcome we're trying to predict.
 
-```{r outcome-belief-check}
-# set.seed(28)
-# house_check = check_prior(
-#   reconciled, n = 1000,
-#   newdata = data.frame(sqft = 3000, age = 30, bedrooms = 3)
-# )
-# plot(house_check, type = "outcome", response = "expected")
-```
+### Looking at the Regression Model
 
-For a relationship across houses, use
-`plot(house_check, type = "model")` with a recent flexplot providing its
-public prediction renderer. A check built from a wider predictor grid is
-more informative than this one house. Use `response = "simulated"` to
-add individual-outcome variation; that is a different question from the
-beliefs above.
+There's another way to inspect our priors that I think is even more useful. Instead of looking at the overall distribution of predicted house prices, we can look at the relationships our priors imply between our predictors and the outcome.
 
-So far we've examined individual coefficients. A prior predictive check
-draws from the **entire collection of selected priors** and generates
-outcomes at predictor values we choose. It uses no fitted coefficients
-or posterior draws.
+For example, let's examine the relationship between square footage and selling price, separately for houses with different numbers of bedrooms. We'll hold age constant at 10 years.
 
-We'll compare study hours while keeping practice sessions fixed. Judge
-the scores using substantive knowledge, without tuning the priors to
-reproduce the observed outcomes.
-
-```{r predictive}
-# prediction_cases = data.frame(x = c(0, 2.5, 5, 7.5, 10), z = 2)
-# prediction_cases
-# set.seed(52)
-# check = check_prior(priors, n = 500, newdata = prediction_cases)
-# plot(check, type = "interval")
-```
-
-The earlier `plot(priors)` showed parameter distributions.
-`plot(check, type = "outcome")` shows the scores those priors make
-plausible; this is the default for `plot(check)`. Here we asked for
-interval panels so we can compare the two kinds of uncertainty. Use
-`plot(check, type = "model")` to see the median expected relationship
-and a central 90% prior interval, based on all the stored draws. This
-band describes uncertainty about expected scores, not differences
-between individual students. Add `display = "draws"` to see individual
-relationships, or `display = "both"` to show them alongside the band.
-The `draws` argument limits the individual curves, not the draws used
-for the interval.
-
-The **Expected outcome** panel shows uncertainty about conditional mean
-scores. The **Predicted outcome** panel adds residual variation. Even if
-we knew the expected score precisely, individual students could still
-differ.
-
-Both panels show medians and central 90% intervals. Rows 1--5 mean 0,
-2.5, 5, 7.5, and 10 study hours, each with 2 practice sessions. The axis
-labels cases, not hours. Use `type = "interval", response = "expected"`
-or `response = "simulated"` to inspect one panel. We'll keep these cases
-for the next check.
-
-Suppose this is a 100-point test, but our prior predictive check
-suggests that scores of 140 are plausible. That's a problem. Students
-can't score more than 100 points, regardless of how much they study. A
-Gaussian model is unbounded; narrower priors cannot impose hard score
-limits.
-
-We need a substantive reason to revise. Suppose earlier studies suggest
-an expected score near 65 at the centering reference and a
-practice-session effect near 2 points. We can add beliefs for both
-parameters in one chain:
-
-```{r revise-predictive}
-# revised = priors +
-#   update_priors(
-#     "(Intercept)", belief(mean = 65), belief(sd = 8)
-#   ) +
-#   update_priors(
-#     "z", belief(mean = 2), belief(sd = 1)
-#   )
-# set.seed(52)
-# revised_check = check_prior(revised, n = 500, newdata = prediction_cases)
-# plot(revised_check, type = "interval")
-```
-
-Compare expected-score uncertainty at the same predictor values. The
-additional beliefs narrow it here. Individual-observation intervals need
-not shrink by as much: they still include residual variation. `sigma`
-has exactly the same backend-default prior in both checks; use
-`update_priors("sigma", ...)` to elicit a different residual-scale
-prior.
-
-Keep revising when substantive knowledge justifies it. The check helps
-us discover implications we hadn't considered, without tuning priors to
-imitate the outcomes already in front of us.
-
-### Keep the expert's answers
-
-Suppose a real estate professional gives these answers for two houses:
-
-```{r expert-interview, warning=FALSE}
-# interview = house_priors +
-#   update_outcome(
-#     at = list(sqft = 1500, age = 30, bedrooms = 3),
-#     belief(mode = 300000), belief(value < 250000, probability = .05)
-#   ) +
-#   update_outcome(
-#     at = list(sqft = 3000, age = 30, bedrooms = 3),
-#     belief(mode = 500000), belief(value < 400000, probability = .05)
-#   )
-# summary(interview)
-```
-
-Keep those answers, even when this model cannot represent them together.
-The summary identifies conflicts the mathematics can establish. A
-numerical failure is reported separately: a solver getting stuck doesn't
-make the expert wrong. Neither result discards the answers or selects an
-unverified prior. Ask about the **expected price** for each kind of
-house; uncertainty about one actual sale also includes variation this
-elicitation leaves out.
-
-The default `tolerance = 1e-6` is a numerical matching rule, not a claim
-that an expert knows prices to a millionth of a dollar. If the estimate
-means "about \$300,000, to the nearest \$10,000," record that precision
-explicitly: `belief(mode = 300000, tolerance = 5000)`. If a probability
-is reported to the nearest percentage point, `tolerance = .005`
-expresses that rounding. Choose these tolerances from the interview
-protocol, rather than widening them afterwards to make a model fit. They
-control how closely the model matches an answer; the probability
-statements describe uncertainty about expected prices. None of the
-recorded targets are rewritten.
-
-### A little mathematics, if you want it
-
-With independent Normal priors, write the coefficient mean vector as
-$\boldsymbol\mu$ and its diagonal covariance matrix as $\Sigma$. At a
-specified predictor configuration, the model-matrix row $\mathbf{x}^T$
-uses the backend's centered-intercept convention. Then
-
-$$
-M=\mathbf{x}^T\boldsymbol\beta,\qquad
-E(M)=\mathbf{x}^T\boldsymbol\mu,\qquad
-\operatorname{Var}(M)=\mathbf{x}^T\Sigma\mathbf{x}.
-$$
-
-After prioritizing explicit beliefs, the preference criterion is
-$\mathrm{KL}(\text{adjusted prior}\;||\;\text{original prior})$. It
-measures both changes in location and changes in uncertainty in units of
-the original priors.
-
-For one **exact location constraint with variances held fixed**, the
-minimum-Mahalanobis solution is
-
-$$
-\boldsymbol\mu_{new}=\boldsymbol\mu_0+
-\frac{\Sigma_0\mathbf{x}}{\mathbf{x}^T\Sigma_0\mathbf{x}}
-(m-\mathbf{x}^T\boldsymbol\mu_0).
-$$
-
-That formula is a useful benchmark, not the solution to general
-mean-and-variance reconciliation. The general method uses numerical
-optimization and checks achieved beliefs against their tolerances. It
-currently requires Gaussian identity models, numeric predictors, and
-independent Normal coefficient priors. Independence is in the centered
-parameterization; categorical predictors, Student's t priors, and
-individual-outcome elicitation are not supported here. More general
-beliefs could require coefficient correlations that this initial method
-cannot represent. See the *Joint outcome elicitation: method and
-limitations* vignette for the optimization details.
-
-## Beliefs about residual variation
-
-Even houses with the same square footage, age, and bedroom count sell
-for different prices. In a Gaussian model, `sigma` describes that
-variation around the expected price. Its prior describes our uncertainty
-about **how much variation there is**.
-
-Suppose we believe sigma averages about \$30,000. Start with one belief:
-
-```{r sigma-mean}
-data(homes_2024)
-sigma_priors = identify_priors(
-  sale_price ~ sqft + age + bedrooms, data = homes_2024
-) + update_priors("sigma", belief(mean = 30000))
-print(sigma_priors)
-```
-
-This keeps the backend's exponential family and sets its rate to
-`1 / 30000`. It does not fix sigma at \$30,000, and \$30,000 is not the
-mean absolute error of individual sale prices.
-
-Now suppose we also assign 95% probability to sigma being below
-\$60,000:
-
-```{r sigma-two-beliefs}
-sigma_priors = sigma_priors + update_priors(
-  "sigma", belief(value < 60000, probability = .95)
+```{r}
+houses = expand.grid(
+  sqft = seq(1000, 3000, length.out = 30),
+  age = 10,
+  bedrooms = c(2, 3, 4)
 )
-summary(sigma_priors)
+
+set.seed(123)
+check = check_prior(priors, n = 1000, newdata = houses)
+
+plot(
+  check,
+  type = "model",
+  formula = sale_price ~ sqft | bedrooms
+)
 ```
 
-flexbayes checks both beliefs together. It prefers the default
-exponential when that family fits; otherwise it considers half-normal,
-half-Cauchy, and half-Student's t priors supported by rstanarm. Here the
-half-t fits, with both scale and degrees of freedom elicited. Its mean
-exists, but it has no finite SD: those are different properties. Add
-`diagnostics = TRUE` to the summary to inspect the original default and
-fitting details.
+Now we're looking at the *expected* relationship between square footage and selling price. The line represents the median expected price from our prior draws, while the shaded region represents a central 90% interval.
 
-These supported families all peak at zero. They cannot represent a
-positive-mode belief such as `belief(mode = 30000)`; flexbayes reports
-that backend limitation rather than treating the mode as a mean.
-`check_prior()` samples the selected sigma for individual-outcome
-simulations. Expected-response predictions exclude that residual noise,
-and `update_outcome()` never adjusts sigma to meet expected-price
-beliefs.
+That shaded region is important. Remember, our priors aren't just expressing beliefs about the most likely values of our parameters. They're also expressing how uncertain we are about those values. The shaded region shows us how that uncertainty translates into uncertainty about the expected price of a house.
 
-## Choosing a backend
+We can also look at individual regression lines drawn from our priors:
 
-The same beliefs can go to either backend. `flexbayes` deliberately
-starts both with the same proper priors, derived from rstanarm 2.32.2.
-Choosing brms does **not** switch to native brms defaults, which include
-flat coefficient priors.
-
-```{r backend-choice}
-backend_priors = lapply(c("rstanarm", "brms"), function(backend) {
-  identify_priors(y ~ x + z, d, package = backend) +
-    update_priors("x", belief(mode = 3), belief(sd = 1))
-})
-stopifnot(identical(backend_priors[[1]]$selected,
-                    backend_priors[[2]]$selected))
-brms_arguments = as_brms(backend_priors[[2]])
+```{r}
+plot(
+  check,
+  type = "model",
+  formula = sale_price ~ sqft | bedrooms,
+  display = "draws",
+  draws = 20
+)
 ```
 
-Use `as_rstanarm()` or `as_brms()` to inspect the model arguments, then
-`fit()` to fit through the selected backend. The centered intercept has
-the same meaning in both. brms also permits different coefficient-prior
-families and adds Gamma and lognormal sigma candidates:
+Each line represents one possible regression model generated from our priors. Notice that some lines might be steeper than others, and some might even go in the opposite direction! That's because we're allowing the slopes and intercept to vary according to the distributions we specified earlier.
 
-```{r brms-sigma}
-brms_sigma = identify_priors(
-  sale_price ~ sqft + age + bedrooms, homes_2024, package = "brms"
-) + update_priors("sigma", belief(mode = 30000))
-summary(brms_sigma)
+Personally, I find this sort of visualization much easier to interpret than a bunch of probability density functions. I might have trouble deciding whether a standard deviation of 100 is reasonable for a regression coefficient, but I can probably recognize when my priors suggest that a 3,000-square-foot house should sell for \$12 million.
+
+### Expected Outcomes Versus Individual Outcomes
+
+There's one more distinction worth making. So far, we've been looking at uncertainty about the *expected* selling price. But remember our old friend sigma? Even if we knew all the regression coefficients perfectly, individual houses would still sell for different amounts.
+
+We can examine this distinction using:
+
+```{r}
+plot(check, type = "outcome", response = "expected")
+
+plot(check, type = "outcome", response = "simulated")
 ```
 
-We supplied a peak but no width. Here the Gamma prior keeps the
-universal exponential default's SD as an explicitly disclosed reference.
-Add another belief if that width doesn't reflect your knowledge. This is
-a prior for sigma itself, not for residual errors. With rstanarm, the
-supported sigma families all peak at zero, so the same positive-mode
-request retains a fallback instead. Whichever backend you choose,
-inspect the prior predictive implications before fitting. Fallbacks
-still require explicit `allow_fallback = TRUE` approval for export,
-fitting, or simulation.
+The first plot shows the distribution of *expected* prices generated by our prior draws. The second adds residual variation by drawing individual selling prices using our prior for sigma.
 
-## Other ways to express your beliefs
+Consequently, the second distribution will generally be more spread out. And if it's ridiculously spread out, that might mean our prior for sigma needs some attention.
 
-You may find standardized slopes easier to think about. Instead of score
-points per study hour, we describe the change in expected score, in
-outcome SDs, for a one-SD increase in study hours. Here's a separate
-specification using that language:
+### What If Our Priors Produce Ridiculous Predictions?
 
-```{r standardized}
-# standardized = update(
-#   priors, parameter = "x", remove = c(1, 2),
-#   belief(mode = .3, scale = "standardized"),
-#   belief(sd = .15, scale = "standardized")
-# )
-# print(standardized)
-```
+Well, we revise them! That's really the point of doing prior predictive checks in the first place.
 
-The conversion uses the observed sample SDs:
-`beta_star = beta * sd(x) / sd(y)`. flexbayes puts the beliefs into
-original coefficient units; the model data stay as they were. We saved
-this alternative as `standardized`; our main specification and the
-predictive checks above remain unchanged.
+Maybe our prior for square footage is too uncertain. Maybe we've specified an intercept that doesn't make sense. Or maybe our prior for sigma allows far more unexplained variation than we actually believe is plausible.
 
-## Where to go next
+Whatever the problem, we can go back to our `update_priors()` or `update_outcome()` functions, revise our beliefs, and run another predictive check.
 
-Once satisfied, use `as_rstanarm(revised)` to inspect backend arguments
-and `fit(revised)` to fit the original model. We'll leave both for
-later. We haven't needed to fit a model to examine our priors.
+One word of caution, though: **we shouldn't change our priors just because they don't match the data we've collected.** That would rather defeat the purpose of specifying priors in the first place. Instead, we should be asking whether the predictions make sense given what we knew about the problem *before* examining the outcome data.
 
-See [`identify_priors()`](../html/identify_priors.html),
-[`belief()`](../html/belief.html),
-[`update_priors()`](../html/update_priors.html), [`update()` for prior
-objects](../html/update.flexbayes_priors.html),
-[`check_prior()`](../html/check_prior.html),
-[`as_rstanarm()`](../html/as_rstanarm.html),
-[`as_brms()`](../html/as_brms.html), and [`fit()`](../html/fit.html) for
-details. Logistic and Poisson models also support additional belief
-scales, including centered-intercept outcome beliefs and odds-ratio or
-rate-ratio beliefs for eligible slopes.
+The goal isn't to make our priors predict the observed data perfectly. It's to make sure our priors represent beliefs we're actually willing to defend.
