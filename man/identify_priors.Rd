@@ -41,3 +41,6 @@ Failed outcome reconciliation retains the previous coherent coefficient-prior
 collection. Export, fitting and simulation require explicit approval through
 allow_fallback = TRUE before using these priors.
 }
+\seealso{
+\code{\link[=switch_backend]{switch_backend()}}, \code{\link[=update_priors]{update_priors()}}
+}

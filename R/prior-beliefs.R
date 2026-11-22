@@ -402,23 +402,25 @@ prior_apply_parameter = function(object, ..., parameter, remove = integer()) {
     records = c(records, list(r))
   }
   object$beliefs[[parameter]] = records
-  if (!length(records)) {
-    object$candidates[parameter] = list(list())
-    return(prior_select_compatible(object))
-  }
+  object$candidates[[parameter]] = prior_parameter_candidates(object, parameter)
+  prior_select_compatible(object)
+}
+
+# The update and backend-switch paths fit exactly the same stored constraints.
+prior_parameter_candidates = function(object, parameter) {
+  records = object$beliefs[[parameter]]
+  if (!length(records)) return(list())
 
   # Mathematical contradictions take precedence over family fitting.
   consistency = if (parameter == "sigma" && prior_has_sigma(object))
     prior_scale_consistency(records) else prior_check_probability_constraints(records)
   if (consistency$contradictory) {
-    object$candidates[[parameter]] = list(valid = FALSE, status = "contradictory",
-      conflicts = consistency$conflicts, message = consistency$message)
-    return(prior_select_compatible(object))
+    return(list(valid = FALSE, status = "contradictory",
+      conflicts = consistency$conflicts, message = consistency$message))
   }
 
   result = tryCatch(prior_fit_candidates(records, object$defaults[[parameter]], object$backend$package), error = function(error)
     list(valid = FALSE, status = "no_supported_fit", alternatives = list(),
       message = paste("Numerical elicitation failed; mathematical incompatibility was not established.", conditionMessage(error))))
-  object$candidates[[parameter]] = result
-  prior_select_compatible(object)
+  result
 }

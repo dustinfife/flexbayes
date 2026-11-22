@@ -19,12 +19,10 @@
 #' collection. Export, fitting and simulation require explicit approval through
 #' allow_fallback = TRUE before using these priors.
 #' @return A flexbayes_priors object.
+#' @seealso [switch_backend()], [update_priors()]
 #' @export
 identify_priors = function(formula, data, family = stats::gaussian(), package = "rstanarm") {
-  if (!is.character(package) || length(package) != 1L || !package %in% c("rstanarm", "brms")) stop("Choose package = 'rstanarm' or 'brms'.")
-  if (!requireNamespace(package, quietly = TRUE)) stop("Install ", package, " to identify priors.")
-  version = as.character(utils::packageVersion(package))
-  if (package == "rstanarm" && version != "2.32.2") stop("Default resolution is verified only for rstanarm 2.32.2; installed: ", version)
+  version = prior_backend_version(package)
   prior_validate_family(family)
   if (!inherits(formula, "formula") || length(formula) != 3L) stop("Supply a two-sided formula.")
   if (any(all.names(formula) %in% c("|", "||"))) stop("Mixed models are not supported.")

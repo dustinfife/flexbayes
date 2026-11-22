@@ -166,7 +166,7 @@ priors = priors +
 
 ## What if the beliefs do not fit?
 
-When we specify our beliefs, the computer does its best to find a distribution that fits those criteria. But what happens if we give the computer contradictory information? Let's look at an example:
+When we specify our beliefs, the computer does its eekeeasdbest to find a distribution that fits those criteria. But what happens if we give the computer contradictory information? Let's look at an example:
 
 ```{r contradictory}
 priors = priors + update_priors(
@@ -185,7 +185,7 @@ Fortunately, it's easy to remove the contradictory statements:
 
 ```{r repair}
 priors = priors +
-  update_priors("sqft", remove = c(3, 4))
+  update_priors("sqft", remove = 4:5)
 priors
 ```
 
@@ -344,12 +344,7 @@ But remember, we're Bayesians now. We don't know what the value of `sigma` is, s
 Let's say we believe the residual standard deviation is probably around \$30,000. We could specify that belief just like we did for our other parameters:
 
 ```{r}
-priors = identify_priors(
-  sale_price ~ sqft + age + bedrooms,
-  data = homes_2024,
-  family = gaussian(),
-  package = "brms"
-) +
+priors = priors +
   update_priors(
     "sigma",
     belief(mode = 30000)
@@ -390,6 +385,12 @@ There's one distinction worth emphasizing here. The standard deviation of our **
 
 One final detail: we're using `brms` here because it supports more flexible priors for `sigma`. For example, `rstanarm` doesn't support any `sigma`-prior distributions whose most likely value is greater than zero. So if we tried `belief(mode = 30000)` with `rstanarm`, `flexbayes` would tell us that it couldn't satisfy our belief. We could instead specify `belief(mean = 30000)`, which `rstanarm` can accommodate using an exponential distribution. But remember, the mean and mode are not the same thing! So which backend we choose can affect which beliefs we're able to express.
 
+Before we move on, I should probably also change the backend from `rstanarm` to `brms`; if I didn't I'd get an error in the very next step. To change backends, we would do the following:\
+
+```{r}
+priors = switch_backend(priors, package = "brms")
+```
+
 Now, at this point, if you're anything like me, you're deeply skeptical of your own priors. Like...what if my priors make no sense whatsoever? What if my prior suggests a \$400k house is actually worth pennies? Fortunately, we have another tool at our disposal.
 
 ## Checking Our Priors
@@ -405,21 +406,25 @@ We can do this with the `check_prior()` function:
 ```{r}
 set.seed(123)
 check = check_prior(priors, n = 1000)
-
-plot(check)
 ```
 
 The `n = 1000` argument tells the computer to draw 1,000 sets of parameters from our prior distributions. Notice that we haven't actually fitted a model yet. These are predictions based entirely on our priors, not on estimates obtained from the data.
 
-The resulting plot shows the distribution of house prices our priors consider plausible. And this is where things can get interesting. For example, suppose we see that our priors suggest a substantial number of houses could sell for *negative* amounts of money. That would be a little concerning. (Although I wouldn't object to someone paying me to take their house.)
+To see what our priors are suggesting, it's best to plot them using the `plot` function:
 
-Of course, a few unusual predictions aren't necessarily a problem. But if our priors routinely generate outcomes that seem completely unreasonable, that might be a sign we need to reconsider some of our beliefs. It could also suggest that our model isn't appropriate for the outcome we're trying to predict.
+```{r}
+plot(check) + scale_x_continuous(labels = scales::label_dollar())
+```
+
+That plot shows the distribution of house prices our priors consider plausible. And this is where things can get interesting. For example, suppose we see that our priors suggest a substantial number of houses could sell for *negative* amounts of money. That would be a little concerning. (Although I wouldn't object to someone paying me to take their house.)
+
+Of course, a few unusual predictions aren't necessarily a problem. But if our priors routinely generate outcomes that seem completely unreasonable, that might be a sign we need to adjust some of our beliefs. It could also suggest that our model isn't appropriate for the outcome we're trying to predict. (Like maybe we'd be better of using a poisson model or something).
 
 ### Looking at the Regression Model
 
 There's another way to inspect our priors that I think is even more useful. Instead of looking at the overall distribution of predicted house prices, we can look at the relationships our priors imply between our predictors and the outcome.
 
-For example, let's examine the relationship between square footage and selling price, separately for houses with different numbers of bedrooms. We'll hold `age` constant at 10 years.
+For example, let's examine the relationship between square footage and selling price, separately for houses with different numbers of bedrooms. First we're going to construct a dataset we can use to make actual predictions:
 
 ```{r}
 houses = expand.grid(
@@ -427,10 +432,19 @@ houses = expand.grid(
   age = 10,
   bedrooms = c(2, 3, 4)
 )
+```
+
+Now we can feed that dataset into our `check_prior` function:
+
+```{r}
 
 set.seed(123)
 check = check_prior(priors, n = 1000, newdata = houses)
+```
 
+Then we can plot it:\
+
+```{r}
 plot(
   check,
   type = "model",
