@@ -88,9 +88,26 @@ interface cannot train model y axes exclusively from predictions: hidden
 observed responses can still expand the axis range. For predictor-only
 newdata, stored expected medians supply the preparer's required outcome
 column; no observed response is overwritten. Simulated mode overlays stored
-observations at their actual cases with expected reference-profile curves.
-Omitted predictors use flexplot's means/modal-level conventions. Thus the
-curves are conditional profiles, not averages over the observations.
+observations at their actual cases with expected marginal curves.
+
+Automatic model grids include every raw model predictor. Continuous nuisance
+predictors use five equally spaced values over their observed range; numeric
+x axes use up to 51. Integer or low-cardinality predictors use observed unique
+values (up to nine for nuisance predictors), and categories retain all levels.
+Full combinations receive equal weight, rather than observed-case frequency
+weights. Omitted predictors are averaged within each complete coefficient
+draw, after applying the inverse link. Medians and central 90\% intervals are
+then calculated across all draws. Binned groups average their actual grid
+values, without predicting at fractional discrete values.
+
+Grids are capped at 8,192 cases. Non-x numeric resolutions are reduced
+deterministically, no lower than two, with a warning; x resolution and category
+levels are preserved. If the cap still cannot be met, supply explicit newdata.
+Explicit newdata is never expanded: omitted predictors are averaged over
+supplied rows sharing the displayed coordinates. Inspect the evaluated cases,
+resolutions and weighting through attr(plot, 'prior_model_grid'). Unsupported
+joint configurations (for example, invalid transformed predictors) require
+explicit newdata restricting predictions to valid cases.
 
 Intercept-only models have outcome/interval plots, not model paths. Transformed
 responses, transformed visualization formulas, missing preparation rows,

@@ -424,22 +424,12 @@ Of course, a few unusual predictions aren't necessarily a problem. But if our pr
 
 There's another way to inspect our priors that I think is even more useful. Instead of looking at the overall distribution of predicted house prices, we can look at the relationships our priors imply between our predictors and the outcome.
 
-For example, let's examine the relationship between square footage and selling price, separately for houses with different numbers of bedrooms. First we're going to construct a dataset we can use to make actual predictions:
-
-```{r}
-houses = expand.grid(
-  sqft = seq(1000, 3000, length.out = 30),
-  age = 10,
-  bedrooms = c(2, 3, 4)
-)
-```
-
-Now we can feed that dataset into our `check_prior` function:
+For example, let's examine the relationship between square footage and selling price, separately for houses with different numbers of bedrooms. We don't need to construct a prediction dataset ourselves. `flexbayes` creates a balanced grid of representative values for all the predictors:
 
 ```{r}
 
 set.seed(123)
-check = check_prior(priors, n = 1000, newdata = houses)
+check = check_prior(priors, n = 1000)
 ```
 
 Then we can plot it:\
@@ -452,7 +442,7 @@ plot(
 )
 ```
 
-Now we're looking at the *expected* relationship between square footage and selling price. The line represents the median expected price from our prior draws, while the shaded region represents a central 90% interval.
+Now we're looking at the *expected* relationship between square footage and selling price. Since `age` isn't shown, each prior draw averages expected prices equally over the grid's age values. This is an average over hypothetical houses, rather than the ages' frequencies in our dataset. The line represents the median expected price from our prior draws, while the shaded region represents a central 90% interval.
 
 That shaded region is important. Remember, our priors aren't just expressing beliefs about the most likely values of our parameters. They're also expressing how uncertain we are about those values. The shaded region shows us how that uncertainty translates into uncertainty about the expected price of a house.
 

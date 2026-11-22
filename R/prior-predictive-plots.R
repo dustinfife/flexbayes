@@ -38,6 +38,33 @@ prior_model_preparation = function(x, formula, bins, breaks, labels) {
   metadata = x$metadata
   if (is.null(metadata$prediction_data) || is.null(metadata$terms)) stop("This check lacks model-plot metadata; rerun check_prior().")
   if (!is.symbol(metadata$formula[[2]])) stop("Model plots currently require an untransformed response variable.")
+  data = prior_model_preparation_cases(x)
+  outcome = as.character(metadata$formula[[2]])
+  prep = flexplot::prepare_flexplot(data, model = stats::formula(metadata$terms), formula = formula,
+    bins = bins, breaks = breaks, labels = labels)
+  if (!identical(prep$version, 1L)) stop("Unsupported flexplot preparation contract version.")
+  if (!length(prep$variables$predictors) || !prep$roles$x %in% names(data)) stop("Model plots require a predictor; use an outcome or interval plot for intercept-only models.")
+  if (!identical(as.integer(prep$rows), seq_len(nrow(data)))) stop("Model plot preparation omitted cases with missing values; supply complete prediction cases.")
+  specification = metadata$model_grid
+  if (is.null(specification)) stop("This check lacks balanced-grid metadata; rerun check_prior().")
+  information = list(source = specification$source, weighting = specification$weighting)
+  if (specification$source == "automatic") {
+    expanded = prior_model_grid_expand(specification, prep$roles$x)
+    data = expanded$data
+    finite = metadata$observed_response[is.finite(metadata$observed_response)]
+    placeholder = if (length(finite)) mean(finite) else 0
+    data[[outcome]] = if (metadata$family$family == "binomial" && nrow(data) > 1L)
+      rep(c(0, 1), length.out = nrow(data)) else rep(placeholder, nrow(data))
+    prep = flexplot::prepare_flexplot(data, model = stats::formula(metadata$terms), formula = prep$formula,
+      bins = bins, breaks = breaks, labels = labels)
+    information = c(information, expanded)
+  } else information$data = data[specification$predictors]
+  prep = prior_model_marginal_grid(prep, information)
+  prep
+}
+
+prior_model_preparation_cases = function(x) {
+  metadata = x$metadata
   data = metadata$prediction_data
   original_design = prior_model_grid_matrix(x, data)
   if (!isTRUE(all.equal(original_design, x$X))) stop("Model terms or predictor values changed since check_prior(); rerun the check.")
@@ -46,12 +73,7 @@ prior_model_preparation = function(x, formula, bins, breaks, labels) {
   # New predictor-only cases have no observations to hide or overwrite. Supply
   # stored expected medians solely for the public preparer's outcome requirement.
   if (!outcome %in% names(data)) data[[outcome]] = apply(x$expected, 2, stats::median)
-  prep = flexplot::prepare_flexplot(data, model = metadata$formula, formula = formula,
-    bins = bins, breaks = breaks, labels = labels)
-  if (!identical(prep$version, 1L)) stop("Unsupported flexplot preparation contract version.")
-  if (!length(prep$variables$predictors)) stop("Model plots require a predictor; use an outcome or interval plot for intercept-only models.")
-  if (!identical(as.integer(prep$rows), seq_len(nrow(data)))) stop("Model plot preparation omitted cases with missing values; supply complete prediction cases.")
-  prep
+  data
 }
 
 prior_model_grid_matrix = function(x, grid) {
@@ -66,6 +88,8 @@ prior_model_grid_matrix = function(x, grid) {
 }
 
 prior_model_expected = function(x, grid, ids) {
+  marginal = attr(grid, "prior_marginal")
+  if (!is.null(marginal)) return(prior_model_marginal_expected(x, marginal, ids))
   X = prior_model_grid_matrix(x, grid)
   linear = x$coefficient_draws[ids, , drop = FALSE] %*% t(X)
   if (any(!is.finite(linear))) stop("Nonfinite model-plot linear predictors.")
@@ -77,6 +101,7 @@ prior_model_expected = function(x, grid, ids) {
 
 prior_model_draw_frame = function(grid, values, ids, draw_column) {
   data = grid[rep(seq_len(nrow(grid)), each = length(ids)), , drop = FALSE]
+  attr(data, "prior_marginal") = NULL
   data[[draw_column]] = rep(ids, times = nrow(grid))
   data$prediction = as.vector(values)
   data
@@ -90,8 +115,9 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
   prep = prior_model_preparation(x, formula, bins, breaks, labels)
   count = min(draws, nrow(x$coefficient_draws))
   if (response == "simulated") {
-    if (nrow(prep$data) > max_display) stop("Too many prediction cases for simulated model display; increase max_display or use fewer newdata cases.")
-    count = min(count, floor(max_display / nrow(prep$data)))
+    if (nrow(x$X) > max_display) stop("Too many prediction cases for simulated model display; increase max_display or use fewer newdata cases.")
+    count = min(count, floor(max_display / max(nrow(x$X), nrow(prep$grid))))
+    if (count < 1L) stop("Prediction grid exceeds max_display; increase the display budget.")
   }
   ids = prior_display_indices(nrow(x$coefficient_draws), count)
   if (nrow(prep$grid) * (if (display == "interval") 1 else length(ids)) > max_display) {
@@ -100,10 +126,14 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
   draw_column = tail(make.unique(c(names(prep$grid), all.vars(prep$formula), ".prior_draw")), 1)
   data = prep$data
   if (response == "simulated") {
+    # Simulated points remain the stored prediction cases, never grid simulations.
+    observed = prior_model_preparation_cases(x)
+    data = observed
+
     data = data[rep(seq_len(nrow(data)), each = length(ids)), , drop = FALSE]
     data[[prep$variables$outcome]] = as.vector(x$simulated[ids, , drop = FALSE])
-    data[[draw_column]] = rep(ids, times = nrow(prep$data))
-    data$.prior_observation = rep(seq_len(nrow(prep$data)), each = length(ids))
+    data[[draw_column]] = rep(ids, times = nrow(observed))
+    data$.prior_observation = rep(seq_len(nrow(observed)), each = length(ids))
   }
   if (display == "draws") {
     values = prior_model_expected(x, prep$grid, ids)
@@ -127,7 +157,7 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
     p$layers = c(overlay$interval, p$layers, overlay$median)
   }
   p = prior_model_observed_range(p, x)
-  p + ggplot2::theme_bw() + ggplot2::labs(
+  p = p + ggplot2::theme_bw() + ggplot2::labs(
     title = if (response == "expected") "Expected relationship based on priors" else "Simulated outcomes based on priors",
     y = prior_plot_outcome_name(x),
     subtitle = NULL,
@@ -136,6 +166,11 @@ prior_plot_model = function(x, response, formula, draws, max_display, alpha, bin
       interval = paste("Median and central 90% prior interval;", nrow(x$coefficient_draws), "prior draws."),
       both = paste("Central 90% prior interval from", nrow(x$coefficient_draws), "draws;", length(ids), "individual draws shown."))
   )
+  if (length(prep$marginal$omitted)) p = p + ggplot2::labs(caption = paste(p$labels$caption,
+    if (prep$marginal$source == "automatic") "Equal-grid averages over" else "Supplied-case averages over",
+    paste0(paste(prep$marginal$omitted, collapse = ", "), ".")))
+  attr(p, "prior_model_grid") = prep$marginal
+  p
 }
 
 prior_plot_rng_state = function() {
@@ -183,6 +218,7 @@ prior_model_render = function(prep, data, prediction, draw_column, alpha, respon
     bins = prep$binning$bins, breaks = prep$binning$breaks, labels = prep$binning$labels,
     raw.data = response == "simulated", sample = if (response == "expected") 0 else Inf,
     suppress_smooth = TRUE, se = FALSE, jitter = FALSE, alpha = alpha)
+  p = prior_model_fixed_positions(p)
   if (is.numeric(prep$plot_data[[prep$display_roles$x]])) return(p)
 
   # Keep native categorical points, mappings and dodge positions; only remove
@@ -190,6 +226,22 @@ prior_model_render = function(prep, data, prediction, draw_column, alpha, respon
   p$layers = Filter(function(layer) !(inherits(layer$geom, "GeomLine") &&
     is.data.frame(layer$data) && draw_column %in% names(layer$data)), p$layers)
   p
+}
+
+# Native jitter positions with seed=NA draw a seed even with zero jitter widths.
+# Clone them rather than mutating a shared ggproto position or the global RNG.
+prior_model_fixed_positions = function(p) {
+  p$layers = lapply(p$layers, prior_model_seed_layer)
+  p
+}
+
+prior_model_seed_layer = function(layer) {
+  force(layer)
+  original = layer$position
+  if (!inherits(original, c("PositionJitter", "PositionJitterdodge")) ||
+      length(original$seed) != 1L || !is.na(original$seed)) return(layer)
+  position = ggplot2::ggproto(NULL, original, seed = 0L)
+  ggplot2::ggproto(NULL, layer, position = position)
 }
 
 prior_model_summary = function(x, grid, max_display) {
@@ -201,12 +253,13 @@ prior_model_summary = function(x, grid, max_display) {
   quantiles = matrix(NA_real_, nrow(grid), 3)
   for (start in seq(1, nrow(grid), by = batch)) {
     rows = seq.int(start, min(nrow(grid), start + batch - 1))
-    values = prior_model_expected(x, grid[rows, , drop = FALSE], ids)
+    values = prior_model_expected(x, prior_model_grid_subset(grid, rows), ids)
     quantiles[rows, ] = t(apply(values, 2, stats::quantile, probs = c(.05, .5, .95), names = FALSE))
   }
   grid$prediction = quantiles[, 2]
   grid$.prior_lower = quantiles[, 1]
   grid$.prior_upper = quantiles[, 3]
+  attr(grid, "prior_marginal") = NULL
   grid
 }
 

@@ -11,7 +11,9 @@ check_prior(object, n = 1000, newdata = NULL, allow_fallback = FALSE)
 
 \item{n}{Number of simulations.}
 
-\item{newdata}{Optional predictor data frame; no response is required.}
+\item{newdata}{Optional predictor data frame; no response is required.
+Simulations use these rows, or the original estimation cases when omitted.
+Model plots use a separate balanced grid unless newdata is supplied.}
 
 \item{allow_fallback}{Use retained priors despite unsuccessful elicitation?
 Defaults to FALSE. TRUE explicitly approves their use and issues a warning;
@@ -22,7 +24,9 @@ validation and backend restrictions still apply.}
 A flexbayes_prior_predictive object with draws-by-observations
 matrices expected and simulated, parameter_draws, coefficient_draws,
 the linear_predictor and prediction design matrix, and metadata retaining
-prediction data, frozen model terms, factor levels and contrasts for plotting.
+prediction data, frozen model terms, factor levels and contrasts for plotting,
+and a compact deterministic model-grid recipe. Creating the recipe does not
+change simulation cases, parameter draws, or the random-number state.
 }
 \description{
 Uses selected priors without posterior fitting. Backend defaults may depend

@@ -18,10 +18,14 @@
 #'   validation and backend restrictions still apply.
 #' @param n Number of simulations.
 #' @param newdata Optional predictor data frame; no response is required.
+#'   Simulations use these rows, or the original estimation cases when omitted.
+#'   Model plots use a separate balanced grid unless newdata is supplied.
 #' @return A flexbayes_prior_predictive object with draws-by-observations
 #'   matrices expected and simulated, parameter_draws, coefficient_draws,
 #'   the linear_predictor and prediction design matrix, and metadata retaining
-#'   prediction data, frozen model terms, factor levels and contrasts for plotting.
+#'   prediction data, frozen model terms, factor levels and contrasts for plotting,
+#'   and a compact deterministic model-grid recipe. Creating the recipe does not
+#'   change simulation cases, parameter draws, or the random-number state.
 #' @export
 check_prior = function(object, n = 1000, newdata = NULL, allow_fallback = FALSE) {
   if (!inherits(object, "flexbayes_priors")) stop("Supply a flexbayes_priors object.")
@@ -63,9 +67,10 @@ check_prior = function(object, n = 1000, newdata = NULL, allow_fallback = FALSE)
       prediction_data = if (is.null(newdata)) object$model$data else as.data.frame(newdata),
       observed_response = stats::model.response(object$model$frame),
       terms = object$model$terms, contrasts = object$model$contrasts,
-      factor_levels = lapply(object$model$frame[vapply(object$model$frame, is.factor, logical(1))], levels),
+      factor_levels = stats::.getXlevels(object$model$terms, object$model$frame),
       default_scaling = prior_default_description(object))
   )
+  result$metadata$model_grid = prior_model_grid_specification(object, newdata)
   class(result) = "flexbayes_prior_predictive"
   if (length(prior_fallback_issues(object))) result$metadata$fallback = list(
     approved = allow_fallback, parameters = object$fallbacks, outcome_status = object$joint$status)
@@ -111,8 +116,7 @@ prior_prediction_matrix = function(object, newdata) {
   if (!all(variables %in% names(newdata))) stop("newdata is missing predictors: ", paste(setdiff(variables, names(newdata)), collapse = ", "))
 
   # Retain the estimation sample's factor levels and contrasts for new cases.
-  factors = vapply(object$model$frame, is.factor, logical(1))
-  levels = lapply(object$model$frame[factors], levels)
+  levels = stats::.getXlevels(object$model$terms, object$model$frame)
   frame = stats::model.frame(terms, newdata, na.action = stats::na.fail, xlev = levels)
   X = stats::model.matrix(terms, frame, contrasts.arg = object$model$contrasts)
   if (!identical(colnames(X), colnames(object$model$X)) || nrow(X) != nrow(newdata) || any(!is.finite(X))) stop("newdata does not produce a finite compatible design matrix.")
@@ -191,9 +195,26 @@ prior_simulate_gaussian = function(expected, sigma) {
 #'   observed responses can still expand the axis range. For predictor-only
 #'   newdata, stored expected medians supply the preparer's required outcome
 #'   column; no observed response is overwritten. Simulated mode overlays stored
-#'   observations at their actual cases with expected reference-profile curves.
-#'   Omitted predictors use flexplot's means/modal-level conventions. Thus the
-#'   curves are conditional profiles, not averages over the observations.
+#'   observations at their actual cases with expected marginal curves.
+#'
+#'   Automatic model grids include every raw model predictor. Continuous nuisance
+#'   predictors use five equally spaced values over their observed range; numeric
+#'   x axes use up to 51. Integer or low-cardinality predictors use observed unique
+#'   values (up to nine for nuisance predictors), and categories retain all levels.
+#'   Full combinations receive equal weight, rather than observed-case frequency
+#'   weights. Omitted predictors are averaged within each complete coefficient
+#'   draw, after applying the inverse link. Medians and central 90% intervals are
+#'   then calculated across all draws. Binned groups average their actual grid
+#'   values, without predicting at fractional discrete values.
+#'
+#'   Grids are capped at 8,192 cases. Non-x numeric resolutions are reduced
+#'   deterministically, no lower than two, with a warning; x resolution and category
+#'   levels are preserved. If the cap still cannot be met, supply explicit newdata.
+#'   Explicit newdata is never expanded: omitted predictors are averaged over
+#'   supplied rows sharing the displayed coordinates. Inspect the evaluated cases,
+#'   resolutions and weighting through attr(plot, 'prior_model_grid'). Unsupported
+#'   joint configurations (for example, invalid transformed predictors) require
+#'   explicit newdata restricting predictions to valid cases.
 #'
 #'   Intercept-only models have outcome/interval plots, not model paths. Transformed
 #'   responses, transformed visualization formulas, missing preparation rows,

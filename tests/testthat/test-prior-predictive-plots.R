@@ -10,10 +10,6 @@ renderer_check = function(family = gaussian(), formula = y ~ x + z + g) {
   check_prior(p, 40)
 }
 
-require_draw_renderer = function() {
-  skip_if_not("prepare_flexplot" %in% getNamespaceExports("flexplot"), "New public flexplot renderer required")
-}
-
 test_that("outcome plots pool stored values with IDs and deterministic bounded display", {
   for (family in list(gaussian(), binomial(), poisson())) {
     x = renderer_check(family)
@@ -57,8 +53,7 @@ test_that("public renderer handles numeric, categorical and conditioned prior dr
     stored = p$data
     expect_equal(stored$y, as.vector(x$simulated[unique(stored$.prior_draw), , drop = FALSE]))
     prep = prior_model_preparation(x, y ~ x | z, 3, NULL, NULL)
-    linear = x$coefficient_draws[1:3, , drop = FALSE] %*% t(prior_model_grid_matrix(x, prep$grid))
-    expected = switch(family$family, gaussian = linear, binomial = plogis(linear), poisson = exp(linear))
+    expected = grid_manual_expected(x, prep, 1:3)
     expect_equal(prior_model_expected(x, prep$grid, 1:3), expected)
   }
 })
@@ -70,8 +65,7 @@ test_that("new grids preserve contrasts, transformations and coherent coefficien
     prep = prior_model_preparation(x, y ~ x | g, 3, NULL, NULL)
     ids = c(1, 5, 20)
     values = prior_model_expected(x, prep$grid, ids)
-    design = prior_model_grid_matrix(x, prep$grid)
-    expect_equal(values, x$coefficient_draws[ids, , drop = FALSE] %*% t(design))
+    expect_equal(values, grid_manual_expected(x, prep, ids))
     p = plot(x, type = "model", display = "draws", formula = y ~ x | g, draws = 3)
     expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
   }
@@ -137,8 +131,7 @@ test_that("30-draw conditioned smoke plot preserves paths and custom contrasts",
   priors = identify_priors(y ~ x * g, d)
   check = check_prior(priors, 3)
   prep = prior_model_preparation(check, y ~ x | g, 3, NULL, NULL)
-  design = model.matrix(delete.response(check$metadata$terms), prep$grid, contrasts.arg = check$metadata$contrasts)
-  expect_equal(prior_model_expected(check, prep$grid, 1:3), check$coefficient_draws %*% t(design))
+  expect_equal(prior_model_expected(check, prep$grid, 1:3), grid_manual_expected(check, prep, 1:3))
   expect_s3_class(ggplot2::ggplotGrob(plot(check, type = "model", display = "draws", formula = y ~ x | g)), "gtable")
 })
 
@@ -196,14 +189,15 @@ test_that("model labels count actually displayed joint draws and apply theme_bw"
       p = plot(x, type = "model", display = "draws", formula = y ~ x | z, draws = count)
       expect_equal(p$labels$title, "Expected relationship based on priors")
       expect_equal(p$labels$y, "y")
-      expect_equal(p$labels$caption, paste("Based on", min(count, 40), "prior draws."))
+      expect_match(p$labels$caption, paste("Based on", min(count, 40), "prior draws."), fixed = TRUE)
       expect_null(p$labels$subtitle)
       expect_equal(p$theme, ggplot2::theme_bw())
       expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
     }
-    p = plot(x, type = "model", display = "draws", formula = y ~ x | z, response = "simulated", max_display = 72)
+    budget = 2 * max(nrow(x$X), nrow(prior_model_preparation(x, y ~ x | z, 3, NULL, NULL)$grid))
+    p = plot(x, type = "model", display = "draws", formula = y ~ x | z, response = "simulated", max_display = budget)
     expect_equal(p$labels$title, "Simulated outcomes based on priors")
-    expect_equal(p$labels$caption, "Based on 2 prior draws.")
+    expect_match(p$labels$caption, "Based on 2 prior draws.", fixed = TRUE)
     expect_equal(p$theme, ggplot2::theme_bw())
     expect_identical(x, before)
   }
@@ -277,7 +271,7 @@ test_that("model plots repeat the original observed range across facets and grou
         }
         expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
         expect_equal(p$theme, ggplot2::theme_bw())
-        expect_equal(p$labels$caption, "Based on 4 prior draws.")
+        expect_match(p$labels$caption, "Based on 4 prior draws.", fixed = TRUE)
       }
     }
     expect_identical(x, before)
@@ -333,20 +327,13 @@ test_that("observed references safely handle invalid, constant and legacy observ
   expect_warning(plot(x, type = "model", display = "draws", formula = y ~ x), "rerun check_prior")
 })
 
-prior_band_layers = function(p, geom) {
-  Filter(function(layer) inherits(layer$geom, geom) && is.data.frame(layer$data) &&
-    all(c(".prior_lower", ".prior_upper") %in% names(layer$data)), p$layers)
-}
 
 test_that("prior intervals use response-scale quantiles from every coherent parameter draw", {
   require_draw_renderer()
   for (family in list(gaussian(), binomial(), poisson())) {
     x = renderer_check(family)
     prep = prior_model_preparation(x, y ~ x | z, 3, NULL, NULL)
-    X = model.matrix(delete.response(x$metadata$terms), prep$grid,
-      contrasts.arg = x$metadata$contrasts, xlev = x$metadata$factor_levels)
-    linear = x$coefficient_draws %*% t(X)
-    values = switch(family$family, gaussian = linear, binomial = plogis(linear), poisson = exp(linear))
+    values = grid_manual_expected(x, prep)
     expected = t(apply(values, 2, quantile, probs = c(.05, .5, .95), names = FALSE))
     summary = prior_model_summary(x, prep$grid, 100000)
     expect_equal(summary$prediction, unname(expected[, 2]))
@@ -362,7 +349,7 @@ test_that("prior intervals use response-scale quantiles from every coherent para
     expect_equal(band$data$prediction, summary$prediction)
     expect_equal(band$data$.prior_lower, summary$.prior_lower)
     expect_equal(band$data$.prior_upper, summary$.prior_upper)
-    expect_equal(p$labels$caption, "Median and central 90% prior interval; 40 prior draws.")
+    expect_match(p$labels$caption, "Median and central 90% prior interval; 40 prior draws.", fixed = TRUE)
   }
 })
 
@@ -448,8 +435,7 @@ test_that("summary intervals retain transformed designs, interactions and factor
     x = renderer_check(formula = formula)
     p = plot(x, type = "model", formula = y ~ x | g)
     prep = prior_model_preparation(x, y ~ x | g, 3, NULL, NULL)
-    X = model.matrix(delete.response(x$metadata$terms), prep$grid, contrasts.arg = x$metadata$contrasts)
-    expected = t(apply(x$coefficient_draws %*% t(X), 2, quantile, c(.05, .5, .95)))
+    expected = t(apply(grid_manual_expected(x, prep), 2, quantile, c(.05, .5, .95)))
     band = prior_band_layers(p, "GeomRibbon")[[1]]$data
     expect_equal(band$prediction, unname(expected[, 2]))
     expect_equal(band$.prior_lower, unname(expected[, 1]))
@@ -461,8 +447,7 @@ test_that("summary intervals retain transformed designs, interactions and factor
   priors = identify_priors(y ~ x * g, d)
   x = check_prior(priors, 40)
   prep = prior_model_preparation(x, y ~ x | g, 3, NULL, NULL)
-  X = prior_model_grid_matrix(x, prep$grid)
-  expected = t(apply(x$coefficient_draws %*% t(X), 2, quantile, c(.05, .5, .95)))
+  expected = t(apply(grid_manual_expected(x, prep), 2, quantile, c(.05, .5, .95)))
   p = plot(x, type = "model", formula = y ~ x | g)
   expect_equal(prior_band_layers(p, "GeomRibbon")[[1]]$data$.prior_lower, unname(expected[, 1]))
   expect_s3_class(ggplot2::ggplotGrob(p), "gtable")
