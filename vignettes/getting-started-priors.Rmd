@@ -178,7 +178,8 @@ flexbayes keeps these beliefs and reports the contradiction. The Source column n
 Fortunately, it's easy to remove the contradictory statements:
 
 ```{r repair}
-priors = update(priors, parameter = "sqft", remove = c(3, 4))
+priors = priors +
+  update_priors("sqft", remove = c(3, 4))
 priors
 ```
 
@@ -256,7 +257,7 @@ priors
 >
 > The first question concerns variation among individual house sales. The second concerns uncertainty about the average selling price. It's the second kind of belief that `update_outcome()` currently supports.
 
-As before, you can chain beliefs together with `update_outcome` as well. What's really cool is that each update doesn't replace the existing priors. Instead, you're simply giving the computer more constraints (or, you might say, more *direction)* when estimating priors. The computer will then prioritize the constraints imposed by `update_outcome` over those obtained with `update`. But what happens when our priors conflict with one another?
+As before, you can chain beliefs together with `update_outcome` as well. What's really cool is that each update doesn't replace the existing priors. Instead, you're simply giving the computer more constraints (or, you might say, more *direction)* when estimating priors. The computer will then prioritize the constraints imposed by `update_outcome` over those obtained with `update_priors`. But what happens when our priors conflict with one another?
 
 Let's actually take a look at an example of this happening. Let's start with adding priors on the parameters:
 
@@ -320,7 +321,7 @@ priors
 
 Notice the sqft estimate from the `update_outcome` approach superseded the priors from the `update_priors` approach. Our sqft originally was \$212, but now it's \$125. Age also changed from -\$2,750 to -\$4,504.88. (Apparently, I suck at estimating priors on a parameter). Bedrooms also changed from \$25,000 \$24,804.33.
 
-In my experience, eliciting priors using the `update_outcome` approach is very good at identifying means of parameters, but sometimes a little awkward for eliciting standard deviations, so using both `update` and `update_outcome` is probably best.
+In my experience, eliciting priors using the `update_outcome` approach is very good at identifying means of parameters, but sometimes a little awkward for eliciting standard deviations, so using both `update_priors` and `update_outcome` is probably best.
 
 ## Specifying Priors for Sigma
 

@@ -4,12 +4,15 @@
 \alias{update_priors}
 \title{Compose parameter-specific prior beliefs}
 \usage{
-update_priors(parameter, ...)
+update_priors(parameter, ..., remove = integer())
 }
 \arguments{
 \item{parameter}{One exact parameter name, as displayed by the prior object.}
 
-\item{...}{One or more objects constructed by belief().}
+\item{...}{Objects constructed by belief(). May be empty for removal-only updates.}
+
+\item{remove}{Unique positive integer positions of existing beliefs to remove.
+Defaults to integer() (none). Positions must be in range when applied.}
 }
 \value{
 update_priors() returns a flexbayes_prior_update specification.
@@ -24,12 +27,22 @@ the same machinery as update(), preserving existing beliefs and diagnostics.
 Expected-outcome specifications can be added with update_outcome(); these
 reconcile jointly and may explicitly relax coefficient beliefs. Updating a
 coefficient recomputes reconciliation from its coefficient-only baseline.
-Chain additions as \code{priors + update_priors(...) + update_priors(...)}.
+Chain updates as \code{priors + update_priors(...) + update_priors(...)}.
+Use this interface to add, remove or replace beliefs. Removal positions refer
+to the existing list displayed by summary(), not internal belief identifiers.
+All removals happen simultaneously before additions; surviving beliefs keep
+their order and metadata, and new beliefs are appended in the supplied order.
+Bounds are checked when the specification is applied to a prior object.
+Removing beliefs reuses candidate selection, reconciliation and fallback
+recovery. Removing all beliefs restores the starting default when compatible
+with the remaining model; existing backend and outcome constraints still apply.
 Addition requires a prior object on the left and a specification on the right;
 specifications are not combined independently of a prior object.
 }
 \examples{
 change = update_priors("x", belief(mode = 3), belief(sd = 1))
+removal = update_priors("x", remove = 2)
+replacement = update_priors("x", belief(sd = .5), remove = 2)
 \dontrun{
 priors = identify_priors(y ~ x + z, data = d) +
   change +

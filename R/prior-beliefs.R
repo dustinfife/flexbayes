@@ -381,6 +381,9 @@ prior_distribution_target = function(record, prior) {
 prior_fit_normal = function(records, reference) prior_fit_location_scale(records, reference, "normal")
 
 #' Revise prior beliefs
+#'
+#' Retained for backward compatibility. Prefer adding update_priors()
+#' specifications with `+` to add, remove or replace beliefs.
 #' @param object Prior specification.
 #' @param ... Belief objects.
 #' @param parameter Exact parameter name.
@@ -398,15 +401,7 @@ update.flexbayes_priors = function(object, ..., parameter, remove = integer()) {
     stop("Sigma beliefs require scale = 'original': they describe the residual standard deviation itself.")
   }
   records = object$beliefs[[parameter]]
-  if (!is.numeric(remove) ||
-      anyNA(remove) ||
-      any(!is.finite(remove)) ||
-      any(remove != floor(remove)) ||
-      any(remove < 1 |
-      remove > length(records)) ||
-      anyDuplicated(remove)) {
-    stop("Invalid removal numbers.")
-  }
+  prior_validate_removals(remove, length(records))
   if (length(remove)) records = records[-remove]
 
   # Convert fitting units while keeping the original belief metadata.

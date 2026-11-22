@@ -69,7 +69,7 @@ test_that("unsupported operands and unknown parameters fail clearly", {
   expect_error(+p, "unary")
   expect_error(+spec, "unary")
   # Named beliefs must still be passed as beliefs, not model-control arguments.
-  expect_identical(p + update_priors("x", remove = belief(mean = 1)), update(p, parameter = "x", belief(mean = 1)))
+  expect_identical(p + update_priors("x", note = belief(mean = 1)), update(p, parameter = "x", belief(mean = 1)))
 })
 
 test_that("thresholds are resolved when specifications are constructed", {

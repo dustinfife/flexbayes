@@ -19,5 +19,6 @@
 A revised prior specification.
 }
 \description{
-Revise prior beliefs
+Retained for backward compatibility. Prefer adding update_priors()
+specifications with \code{+} to add, remove or replace beliefs.
 }
