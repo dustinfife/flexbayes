@@ -337,7 +337,7 @@ We've now specified priors for the intercept and slopes of our regression model.
 
 Remember, regression models don't predict outcomes perfectly. Even if two houses have exactly the same square footage, age, and number of bedrooms, they probably won't sell for exactly the same price. There are lots of reasons for this: maybe one house has a nicer kitchen, maybe one has a swimming pool, or maybe the buyer just really, *really* liked the color of the bathroom.
 
-This unexplained variation is represented by a parameter called $\sigma$ (`sigma`). More specifically, `sigma` is the standard deviation of the residuals. If $\`sigma` = \$30,000$, that means approximately 68% of houses would sell within \$30,000 of their expected price (assuming normally distributed residuals).
+This unexplained variation is represented by a parameter called $\sigma$ (`sigma`). More specifically, `sigma` is the standard deviation of the residuals. If $\sigma = \$30,000$, that means approximately 68% of houses would sell within \$30,000 of their expected price (assuming normally distributed residuals).
 
 But remember, we're Bayesians now. We don't know what the value of `sigma` is, so we need to specify a *prior distribution* for it. In other words, we need to express our uncertainty about how much unexplained variation there is.
 
@@ -394,7 +394,7 @@ Now, at this point, if you're anything like me, you're deeply skeptical of your 
 
 ## Checking Our Priors
 
-Now that we've spent all this time specifying priors, we should probably check whether they make any sense. After all, just because we told the computer that we think a particular coefficient has a mean of 212 and a standard deviation of 50 doesn't mean we've specified a reasonable model. It's entirely possible that our individual priors seem reasonable, but when we combine them, they produce some pretty ridiculous predictions.
+Now that we've spent all this time specifying priors, we should probably check whether they make any sense. After all, just because we told the computer that we think a particular coefficient has a mean of \$212 and a standard deviation of \$50 doesn't mean we've specified a reasonable model. It's entirely possible that our individual priors seem reasonable, but when we combine them, they produce some pretty ridiculous predictions.
 
 Fortunately, there's a way to check this. It's called a **prior predictive check**.
 
