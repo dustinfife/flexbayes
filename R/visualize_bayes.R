@@ -57,13 +57,15 @@ bayes_visualize = function(object, plot = "model", formula = NULL,
 
   if (posterior_lines == 0) return(p)
 
+  mapping_variable = get0("logistic_overlay_mapping_variable", asNamespace("flexplot"),
+    inherits = FALSE, ifnotfound = rlang::as_name)
+  x = mapping_variable(p$mapping$x)
   lines = bayes_visualize_posterior_lines(
     draws = draws, grid = grid, formula = formula, data = data,
-    x = rlang::as_name(p$mapping$x),
+    x = x,
     posterior_lines = posterior_lines, seed = seed, ...
   )
 
-  x = rlang::as_name(p$mapping$x)
   geometry = if (is.numeric(data[[x]])) ggplot2::geom_line else ggplot2::geom_point
   p + geometry(
     data = lines,

@@ -14,6 +14,14 @@ bayes_model_formula = function(object) {
   model_formula
 }
 
+# brms wraps its regression formula; flexplot's default extractor expects a formula.
+# Register the model-class adapter so grid generation retains omitted predictors.
+#' @exportS3Method flexplot::get_terms brmsfit
+get_terms.brmsfit = function(model) {
+  variables = all.vars(bayes_model_formula(model))
+  list(predictors = variables[-1], response = variables[1])
+}
+
 bayes_visualize_formula = function(object, data) {
   model_formula = bayes_model_formula(object)
 
