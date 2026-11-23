@@ -420,15 +420,23 @@ Of course, a few unusual predictions aren't necessarily a problem. But if our pr
 
 There's another way to inspect our priors that I think is even more useful. Instead of looking at the overall distribution of predicted house prices, we can look at the relationships our priors imply between our predictors and the outcome.
 
-For example, let's examine the relationship between square footage and selling price, separately for houses with different numbers of bedrooms. We don't need to construct a prediction dataset ourselves. `flexbayes` creates a balanced grid of representative values for all the predictors:
+For example, let's examine the relationship between square footage and selling price, separately for houses with different numbers of bedrooms. To do that, we'll use the `check_priors` function. What this does in the background is create a "fake" dataset with all of our predictor variables, spanning the range of whatever values our variables occupy.
 
 ```{r}
 
+# setting the seed will ensure your results match mine
+# but it's not necessary
 set.seed(123)
 check = check_prior(priors, n = 1000)
 ```
 
-Then we can plot it:\
+You can inspect this dataset if you're curious:
+
+```{r}
+# inspect dataset
+```
+
+That object we created (`check`) stores all we need to plot our fake dataset. For this plot, I want to look at the relationship between the outcome (`sale_price`) and `sqft`, with `bedrooms` separated by panels. (If you need help constructing flexplot-style formulas, see the [flexplot manual.](https://psyarxiv.com/kh9c3/))\
 
 ```{r}
 plot(
@@ -438,11 +446,13 @@ plot(
 )
 ```
 
-Now we're looking at the *expected* relationship between square footage and selling price. Since `age` isn't shown, each prior draw averages expected prices equally over the grid's age values. This is an average over hypothetical houses, rather than the ages' frequencies in our dataset. The line represents the median expected price from our prior draws, while the shaded region represents a central 90% interval.
+Wow! I forgot how cool these plots are! The solid red line shows the average slope between `sqft` and `sale_price` for various levels of `bedrooms` (2-3, 3-4, or 4-5). The bands represent the upper/lower limits of a 90% prior interval. The plots also draw horizontal lines at the maximum and minimum price of homes.
+
+We're not doing too bad! I'd be majorly concerned if lots of our predictions fall below zero or above the most expensive home (around \$875,000). Note that, since we didn't request any visual representation of `age`, it isn't displayed; in the background, each prior draw averages expected prices equally over the fake dataset's age values.
 
 That shaded region is important. Remember, our priors aren't just expressing beliefs about the most likely values of our parameters. They're also expressing how uncertain we are about those values. The shaded region shows us how that uncertainty translates into uncertainty about the expected price of a house.
 
-We can also look at individual regression lines drawn from our priors:
+Instead of looking at bands, we can instead look at individual regression lines drawn from our priors:
 
 ```{r}
 plot(
@@ -456,7 +466,7 @@ plot(
 
 Each line represents one possible regression model generated from our priors. Notice that some lines might be steeper than others, and some might even go in the opposite direction! That's because we're allowing the slopes and intercept to vary according to the distributions we specified earlier.
 
-Personally, I find this sort of visualization much easier to interpret than a bunch of probability density functions. I might have trouble deciding whether a standard deviation of 100 is reasonable for a regression coefficient, but I can probably recognize when my priors suggest that a 3,000-square-foot house should sell for \$12 million.
+Personally, I find this sort of visualization much easier to interpret than a bunch of probability density functions or histograms. I might have trouble deciding whether a standard deviation of 100 is reasonable for a regression coefficient, but I can probably recognize when my priors suggest that a 1,000-square-foot house should sell for \$12 million.
 
 ### Expected Outcomes Versus Individual Outcomes
 
