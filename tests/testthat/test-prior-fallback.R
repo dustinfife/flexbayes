@@ -43,6 +43,8 @@ test_that("initial unsuccessful sigma elicitation retains the backend default", 
 })
 
 test_that("previous elicited priors survive failed additions and recover on removal", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = prior_example() + update_priors("sigma", belief(mean = 30000)) + update_priors("x", belief(mean = 2), belief(sd = 1))
   q = p + update_priors("sigma", belief(mode = 30000))
   expect_identical(q$selected, p$selected)
@@ -80,6 +82,8 @@ test_that("coefficient failures preserve priors and mathematical diagnostics", {
 })
 
 test_that("backend-compatible retained collections recover across update orders", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   base = prior_example()
   for (order in list(c("x", "gb"), c("gb", "x"))) {
     p = fallback_student_beliefs(base, order[1])
@@ -104,6 +108,8 @@ test_that("backend-compatible retained collections recover across update orders"
 })
 
 test_that("multiple failures and numerical failures preserve independent successes", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = (prior_example() + update_priors(parameter = "x", belief(mean = 2)))
   q = p + update_priors("sigma", belief(mode = 5)) +
     update_priors("x", belief(mean = -100))
@@ -151,6 +157,8 @@ test_that("numerical outcome failures remain unverified and preserve priors", {
 })
 
 test_that("fallback opt-in never bypasses stale data, tampering, or backend checks", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   q = prior_example() + update_priors("sigma", belief(mode = 10))
   for (allow in list(NA, 1, "yes", logical())) expect_error(as_rstanarm(q, allow_fallback = allow), "allow_fallback must")
   altered = q
@@ -171,6 +179,8 @@ test_that("fallback opt-in never bypasses stale data, tampering, or backend chec
 })
 
 test_that("fit consumes opt-in and fully successful priors behave as before", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = prior_example()
   expect_identical(as_rstanarm(p, allow_fallback = TRUE), as_rstanarm(p))
   set.seed(20)

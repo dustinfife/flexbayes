@@ -383,13 +383,9 @@ That seems much more reasonable. We've told the computer that \$30,000 is our be
 
 There's one distinction worth emphasizing here. The standard deviation of our **prior for `sigma`** is not the same as `sigma` itself. `sigma` tells us how much *individual house prices* vary around their expected values. The standard deviation of the prior tells us how uncertain we are about *that amount of variation*. It's a standard deviation for a standard deviation. (Statistics is fun, isn't it?)
 
-One final detail: we're using `brms` here because it supports more flexible priors for `sigma`. For example, `rstanarm` doesn't support any `sigma`-prior distributions whose most likely value is greater than zero. So if we tried `belief(mode = 30000)` with `rstanarm`, `flexbayes` would tell us that it couldn't satisfy our belief. We could instead specify `belief(mean = 30000)`, which `rstanarm` can accommodate using an exponential distribution. But remember, the mean and mode are not the same thing! So which backend we choose can affect which beliefs we're able to express.
+One final detail: we're using `brms` here because it supports more flexible priors for `sigma`. For example, `rstanarm` doesn't support any `sigma`-prior distributions whose most likely value is greater than zero. When we specified `belief(mode = 30000)`, `flexbayes` automatically switched to `brms` after checking that it could accommodate the full set of beliefs. We could instead specify `belief(mean = 30000)`, which `rstanarm` can accommodate using an exponential distribution. But remember, the mean and mode are not the same thing!
 
-Before we move on, I should probably also change the backend from `rstanarm` to `brms`; if I didn't I'd get an error in the very next step. To change backends, we would do the following:\
-
-```{r}
-priors = switch_backend(priors, package = "brms")
-```
+We don't need to switch packages ourselves in this example. If we do want to choose a package explicitly, we can use `switch_package(priors, package = "brms")`. Removing a belief won't automatically switch us back to `rstanarm`.
 
 Now, at this point, if you're anything like me, you're deeply skeptical of your own priors. Like...what if my priors make no sense whatsoever? What if my prior suggests a \$400k house is actually worth pennies? Fortunately, we have another tool at our disposal.
 

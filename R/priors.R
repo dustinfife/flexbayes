@@ -10,8 +10,11 @@
 #' @param formula Model formula.
 #' @param data Data frame.
 #' @param family Gaussian identity, binomial logit or Poisson log family.
-#' @param package Fitting backend: rstanarm (default) or brms. brms permits
-#'   coefficient-specific families and additional positive sigma families.
+#' @param package Initial modeling-package preference: rstanarm (default) or brms.
+#'   Belief updates automatically switch from rstanarm to brms when package
+#'   restrictions block selection and the complete specification can be verified
+#'   and exported. brms must be installed; packages are never installed automatically.
+#'   Removing beliefs does not switch back. Use switch_package() for explicit changes.
 #' @details Unsuccessful updates preserve all beliefs and retain the last valid
 #' prior, or the original backend default. Summary and plots show that retained
 #' prior with a fallback label; they do not imply that current beliefs were met.
@@ -19,7 +22,7 @@
 #' collection. Export, fitting and simulation require explicit approval through
 #' allow_fallback = TRUE before using these priors.
 #' @return A flexbayes_priors object.
-#' @seealso [switch_backend()], [update_priors()]
+#' @seealso [switch_package()], [update_priors()]
 #' @export
 identify_priors = function(formula, data, family = stats::gaussian(), package = "rstanarm") {
   version = prior_backend_version(package)
@@ -147,6 +150,7 @@ summary.flexbayes_priors = function(object, diagnostics = FALSE, ...) {
 
 #' @export
 print.summary.flexbayes_priors = function(x, ...) {
+  if (x$diagnostics) prior_package_switch_summary(x$object)
   if (!is.null(x$object$joint)) return(prior_joint_summary(x))
   object = x$object
   diagnostics = x$diagnostics

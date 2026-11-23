@@ -97,6 +97,8 @@ test_that("removing failed beliefs clears fallback safeguards through the shared
 })
 
 test_that("removals preserve whole-model compatibility and outcome reconciliation", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   for (backend in c("rstanarm", "brms")) {
     p = prior_removal_example(backend)
     t_beliefs = list(belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))

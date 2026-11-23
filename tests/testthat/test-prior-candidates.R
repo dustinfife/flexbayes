@@ -39,6 +39,8 @@ student_beliefs = function(p, parameter) {
 }
 
 test_that("t-only candidates select when compatible and preserve other defaults", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = prior_example()
   single = identify_priors(y ~ x, p$model$data)
   t = student_beliefs(single, "x")
@@ -62,6 +64,8 @@ test_that("t-only candidates select when compatible and preserve other defaults"
 })
 
 test_that("candidate plots compare valid densities and remain ggplots", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = prior_example()
   p = (p + update_priors(parameter = "x", belief(mean = 0), belief(sd = 1)))
   plot = plot(p, parameter = "x")
@@ -76,6 +80,8 @@ test_that("candidate plots compare valid densities and remain ggplots", {
 })
 
 test_that("backend choice is separate from mathematical rank", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = student_beliefs(prior_example(), "x")
   p = student_beliefs(p, "gb")
   # x is restored automatically after gb changes.
@@ -94,6 +100,8 @@ test_that("backend choice is separate from mathematical rank", {
 })
 
 test_that("whole-model selections recover in either update order", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   base = prior_example()
   for (order in list(c("x", "gb"), c("gb", "x"))) {
     p = student_beliefs(base, order[1])

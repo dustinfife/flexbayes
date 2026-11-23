@@ -113,6 +113,8 @@ test_that("sigma candidate ranks prefer defaults and simpler verified families",
 })
 
 test_that("sigma failures retain beliefs and distinguish backend limits from contradictions", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = sigma_example()
   mode = p + update_priors("sigma", belief(mode = 30000))
   expect_identical(mode$candidates$sigma$status, "backend_incompatible")

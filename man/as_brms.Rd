@@ -7,7 +7,8 @@
 as_brms(object, allow_fallback = FALSE)
 }
 \arguments{
-\item{object}{A flexbayes_priors object identified with package = "brms".}
+\item{object}{A flexbayes_priors object currently using brms, whether selected
+initially, explicitly with switch_package(), or automatically after an update.}
 
 \item{allow_fallback}{Explicitly approve retained priors after unsuccessful
 elicitation, with a warning. Defaults to FALSE; beliefs remain recorded.}

@@ -75,6 +75,8 @@ test_that("t sampling uses selected scale and plots use the same mathematics", {
 })
 
 test_that("invalid priors and arguments fail without substitution", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = prior_example()
   for (n in list(0, -1, 1.5, NA_real_, Inf, c(1, 2))) expect_error(check_prior(p, n), "positive integer")
   expect_error(check_prior(list()), "flexbayes_priors")

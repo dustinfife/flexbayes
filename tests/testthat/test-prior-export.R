@@ -75,6 +75,8 @@ test_that("fit protects model arguments and passes ordinary arguments unchanged"
 })
 
 test_that("invalid selections and changed models cannot export", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = prior_example()
   q = (p + update_priors(parameter = "x", belief(value < 0, probability = .95), belief(value > 1, probability = .95)))
   expect_error(as_rstanarm(q), "contradictory")

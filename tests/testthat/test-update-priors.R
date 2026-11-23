@@ -47,6 +47,8 @@ test_that("existing fitting failures and contradictions retain all constraints",
 })
 
 test_that("addition reuses scale conversion and whole-model compatibility", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = prior_example()
   expect_identical(p + update_priors("x", belief(mode = .5, scale = "standardized")), prior_apply_parameter(p, parameter = "x", belief(mode = .5, scale = "standardized")))
   q = p + update_priors("x", belief(mean = 0), belief(sd = sqrt(7 / 5)), belief(value < 1, probability = pt(1, 7)))

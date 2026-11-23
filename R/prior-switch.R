@@ -1,4 +1,4 @@
-#' Switch the backend of an existing prior specification
+#' Switch the modeling package of an existing prior specification
 #'
 #' Preserve the original model, universal proper defaults, and all parameter and
 #' expected-outcome beliefs while reevaluating priors for another backend. Belief
@@ -20,6 +20,15 @@
 #' The original object is never modified. Changed data or stale reconciliation
 #' metadata must be resolved before switching. Calling with the current backend
 #' also refits candidates and retries reconciliation.
+#'
+#' Belief updates automatically try brms only when rstanarm restrictions block
+#' selection. The switch is accepted only after the entire specification, including
+#' outcome reconciliation, passes brms export validation. Contradictions and
+#' unverified numerical failures do not trigger migration. No automatic switch
+#' back is made, even after removing beliefs. An explicit switch_package() call
+#' evaluates exactly the requested package, without automatic reversal.
+#' Automatic migrations are recorded in package_switches and displayed by
+#' summary(..., diagnostics = TRUE).
 #' @param object A flexbayes_priors object.
 #' @param package Destination backend, either "rstanarm" or "brms".
 #' @return A revised flexbayes_priors object with refreshed backend metadata,
@@ -28,13 +37,14 @@
 #' @examples
 #' \dontrun{
 #' priors = identify_priors(sale_price ~ sqft + age + bedrooms, homes_2024) +
-#'   update_priors("sigma", belief(mode = 30000))
-#' priors = switch_backend(priors, package = "brms")
+#'   update_priors("sqft", belief(mode = 212))
+#' # An optional explicit choice; compatible beliefs do not require a switch.
+#' priors = switch_package(priors, package = "brms")
 #' summary(priors)
 #' check = check_prior(priors)
 #' }
 #' @export
-switch_backend = function(object, package) {
+switch_package = function(object, package) {
   if (!inherits(object, "flexbayes_priors")) stop("Supply a flexbayes_priors object.")
   version = prior_backend_version(package)
   prior_switch_validate(object)
@@ -103,4 +113,45 @@ prior_switch_references = function(object) {
   object$last_valid_source[reset] = "backend_default"
   object$backend$compatible = prior_available_compatible(object)
   object
+}
+
+# Attempt migration once, only after selection has identified a package restriction.
+# A trial is ordinary R data; failed trials leave the original fallback intact.
+prior_maybe_switch_package = function(object) {
+  if (object$backend$package != "rstanarm") return(object)
+  statuses = vapply(object$candidates, function(candidate) if (is.null(candidate$status)) "default" else candidate$status, character(1))
+  blocked = names(statuses)[statuses == "backend_incompatible"]
+  if (!length(blocked) || any(statuses %in% c("contradictory", "no_supported_fit")) ||
+      identical(object$joint$status, "incompatible")) return(object)
+  if (!prior_package_available("brms")) {
+    message("rstanarm cannot accommodate the requested prior for ", paste(blocked, collapse = ", "),
+      ". Install brms to evaluate an alternative; retained priors still require allow_fallback = TRUE.")
+    return(object)
+  }
+
+  # Refitting, reconciliation and faithful export must all pass before accepting.
+  destination = tryCatch(suppressWarnings({
+    candidate = switch_package(object, package = "brms")
+    if (length(prior_fallback_issues(candidate))) NULL else {
+      as_brms(candidate)
+      candidate
+    }
+  }), error = function(error) NULL)
+  if (is.null(destination)) return(object)
+  reason = paste(blocked, collapse = ", ")
+  destination$package_switches = c(object$package_switches,
+    list(list(from = "rstanarm", to = "brms", parameters = blocked,
+      reason = "rstanarm prior-family restrictions")))
+  message("rstanarm cannot accommodate the requested prior for ", reason,
+    ". Switching to brms after verifying the complete prior specification.")
+  destination
+}
+
+prior_package_available = function(package) requireNamespace(package, quietly = TRUE)
+
+prior_package_switch_summary = function(object) {
+  for (event in object$package_switches) prior_console_line(paste0("Automatic package switch: ",
+    event$from, " -> ", event$to, "; ", paste(event$parameters, collapse = ", "),
+    " (", event$reason, ")."))
+  invisible(NULL)
 }

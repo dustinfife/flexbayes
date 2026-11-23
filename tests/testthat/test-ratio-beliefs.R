@@ -97,6 +97,8 @@ test_that("invalid ratio scales, targets and terms are rejected", {
 })
 
 test_that("ratio contradictions and t-only compatibility remain distinct", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   p = ratio_example()
   q = (p + update_priors(parameter = "x", belief(value < 1, probability = .95, scale = "odds_ratio"), belief(value > 2, probability = .95, scale = "odds_ratio")))
   expect_identical(q$candidates$x$status, "contradictory")

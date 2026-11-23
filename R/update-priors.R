@@ -20,6 +20,12 @@
 #' Addition requires a prior object on the left and a specification on the right;
 #' specifications are not combined independently of a prior object.
 #'
+#' If rstanarm restrictions block a belief update, flexbayes tries brms once and
+#' switches only if the entire prior specification can be verified and exported.
+#' This requires brms to be installed. Contradictory or numerically unresolved
+#' beliefs retain the existing fallbacks and safeguards. There is no automatic
+#' switch back; use switch_package() to request a package explicitly.
+#'
 #' @param parameter One exact parameter name, as displayed by the prior object.
 #'   May also be supplied as the first unnamed argument.
 #' @param outcome Named list with one finite numeric value for every predictor.
@@ -128,12 +134,13 @@ update_priors = function(..., parameter = NULL, outcome = NULL, remove = integer
     stop("Use a flexbayes_priors object on the left and an update_priors() specification on the right.")
   }
 
-  if (identical(e2$target, "outcome")) return(prior_apply_outcome(e1, e2))
+  if (identical(e2$target, "outcome")) return(prior_maybe_switch_package(prior_apply_outcome(e1, e2)))
   if (!identical(e2$target, "parameter")) stop("Unknown update target; construct a specification with update_priors().")
 
   # Unname the list so a belief argument cannot masquerade as parameter/remove.
   remove = e2$remove
-  do.call(prior_apply_parameter, c(list(object = e1, parameter = e2$parameter, remove = remove), unname(e2$beliefs)))
+  object = do.call(prior_apply_parameter, c(list(object = e1, parameter = e2$parameter, remove = remove), unname(e2$beliefs)))
+  prior_maybe_switch_package(object)
 }
 
 # Use the identical method for right-hand dispatch as well, so unsupported

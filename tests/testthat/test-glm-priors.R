@@ -66,6 +66,8 @@ test_that("GLM prediction inverse links and sampling are exact and reproducible"
 })
 
 test_that("GLM beliefs retain link scale and compatibility rules", {
+  # Test package-specific fallback selection independently of automatic migration.
+  local_mocked_bindings(prior_maybe_switch_package = identity)
   for (family in list(binomial(), poisson())) {
     p = glm_prior_example(family)
     q = (p + update_priors(parameter = "x", belief(mode = .5), belief(sd = .2)))

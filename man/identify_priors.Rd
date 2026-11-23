@@ -18,8 +18,11 @@ identify_priors(
 
 \item{family}{Gaussian identity, binomial logit or Poisson log family.}
 
-\item{package}{Fitting backend: rstanarm (default) or brms. brms permits
-coefficient-specific families and additional positive sigma families.}
+\item{package}{Initial modeling-package preference: rstanarm (default) or brms.
+Belief updates automatically switch from rstanarm to brms when package
+restrictions block selection and the complete specification can be verified
+and exported. brms must be installed; packages are never installed automatically.
+Removing beliefs does not switch back. Use switch_package() for explicit changes.}
 }
 \value{
 A flexbayes_priors object.
@@ -42,5 +45,5 @@ collection. Export, fitting and simulation require explicit approval through
 allow_fallback = TRUE before using these priors.
 }
 \seealso{
-\code{\link[=switch_backend]{switch_backend()}}, \code{\link[=update_priors]{update_priors()}}
+\code{\link[=switch_package]{switch_package()}}, \code{\link[=update_priors]{update_priors()}}
 }

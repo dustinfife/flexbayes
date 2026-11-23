@@ -124,7 +124,8 @@ test_that("positive-mode sigma beliefs retain a disclosed reference SD", {
   expect_match(code, "real<lower=0> sigma", fixed = TRUE)
   expect_match(paste(capture.output(print(summary(q))), collapse = "\n"), "mode: 3", fixed = TRUE)
   r = identify_priors(p$model$formula, p$model$data) + update_priors("sigma", belief(mode = 3))
-  expect_identical(r$candidates$sigma$status, "backend_incompatible")
+  expect_identical(r$backend$package, "brms")
+  expect_identical(r$selected$sigma, q$selected$sigma)
 })
 
 test_that("multiple positive sigma constraints fit without dropping beliefs", {

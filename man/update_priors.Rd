@@ -48,6 +48,13 @@ with the remaining model; existing backend and outcome constraints still apply.
 Addition requires a prior object on the left and a specification on the right;
 specifications are not combined independently of a prior object.
 }
+\details{
+If rstanarm restrictions block a belief update, flexbayes tries brms once and
+switches only if the entire prior specification can be verified and exported.
+This requires brms to be installed. Contradictory or numerically unresolved
+beliefs retain the existing fallbacks and safeguards. There is no automatic
+switch back; use switch_package() to request a package explicitly.
+}
 \section{Expected-outcome reconciliation}{
 
 Initially supports Gaussian identity models with an intercept,
