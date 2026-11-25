@@ -279,6 +279,37 @@ must still satisfy every raw coefficient tolerance. Conflict certificates are
 also evaluated in dimensionless coordinates. Actual, unscaled belief residuals
 are always recomputed before accepting a result.
 
+A failed KL stage with a nonzero compromise bound can now be refined by a
+feasible Newton log-barrier search. It first sharpens the minimax epigraph
+solution, then minimizes KL on the **same relative near-minimax face**. This is an equivalent numerical formulation,
+not a change to the priorities or acceptance bands. At the fixed compromise bound,
+a coefficient probability band becomes a pair of linear inequalities in its mean
+and SD, using Normal quantiles. Outcome probability bands become inequalities
+in the outcome mean and the norm of its coefficient SD contributions. Means stay
+in baseline-SD units; positive SDs use the pre-polishing priority-2 coordinate
+scales. Keeping those scales avoids a nearly vanishing minimax SD becoming a
+poor KL coordinate scale; it imposes no bound on selected SDs.
+Analytic gradients and Hessians, diagonal preconditioning, and a slack-variable
+interior search avoid the ill-conditioning of very large penalty parameters on
+thin faces. When possible, Newton steps use a QR least-squares solve instead of
+forming normal equations, which would square the conditioning problem.
+Minimax polishing is important here: even a small stopping error can materially
+change the variance budget on a thin face and make results depend on units. This recovery path uses base R and adds no dependency.
+
+The resulting point is converted back to the original log-SD coordinates. It must
+pass the **unchanged** original outcome, minimax-bound, KL-ordering, feasibility,
+and nonnegative-multiplier stationarity checks. Solver stopping codes alone are
+not sufficient. A failed recovery remains numerically unresolved. In particular,
+this does not claim an exact attained minimax optimum when an unconstrained
+coefficient SD approaches zero: the existing relative `1e-6` near-minimax face
+remains the numerical convention, and positive SDs are still required.
+
+When a solve fails, technical summaries distinguish original coefficient priors,
+unverified attempted priors and their belief evaluations, and retained fallback
+priors. Attempted quantities are not labeled as selected distributions. Successful
+summaries identify the verified reconciled priors instead. Ordinary summaries
+continue to omit optimization details.
+
 The routine consumes no random numbers. It is a deterministic local search,
 not a proof of a global optimum or uniqueness. A single outcome belief cannot
 identify every coefficient mean and variance. The minimax/KL criterion chooses

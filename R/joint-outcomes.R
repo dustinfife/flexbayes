@@ -180,6 +180,7 @@ prior_joint_augmented_value = function(theta, ...) prior_joint_augmented(theta, 
 prior_joint_augmented_gradient = function(theta, ...) prior_joint_augmented(theta, ...)$gradient
 
 prior_joint_solve = function(start, problem, tier = 3L, coefficient_limit = 0, coefficient_scale = 1) {
+  reference_start = start
   lambda = rep(0, length(prior_joint_system(start, problem, tier, coefficient_limit, coefficient_scale)$g))
   rho = 10
   previous = Inf
@@ -233,7 +234,7 @@ prior_joint_solve = function(start, problem, tier = 3L, coefficient_limit = 0, c
     start = start - correction
   }
   current = prior_joint_system(start, problem, tier, coefficient_limit, coefficient_scale)
-  list(
+  result = list(
     par = start,
     convergence = fit$convergence,
     iterations = iteration,
@@ -241,6 +242,17 @@ prior_joint_solve = function(start, problem, tier = 3L, coefficient_limit = 0, c
     objective = current$value,
     stationarity = prior_joint_stationarity(current)
   )
+  if (tier != 3L || prior_joint_stage_verified(result)) return(result)
+
+  # The penalty solve can stall on a very narrow near-minimax face. Refine
+  # equivalent constraints while preserving the priorities and acceptance checks.
+  refined = tryCatch(prior_joint_face_refine(reference_start, problem, coefficient_limit, coefficient_scale), error = function(error) NULL)
+  if (is.null(refined)) result else refined
+}
+
+prior_joint_stage_verified = function(stage) {
+  stage$convergence == 0 && is.finite(stage$objective) && stage$violation < 1e-8 &&
+    is.finite(stage$stationarity) && stage$stationarity < 1e-4
 }
 
 # A nonnegative multiplier certificate checks local first-order optimality.
@@ -490,7 +502,12 @@ prior_joint_reconcile = function(object) {
 
     # A relative numerical allowance opens the nearly optimal minimax face
     # for KL optimization. Zero sacrifice stays exactly zero.
-    third = prior_joint_attempt(theta2, problem, tier = 3L, coefficient_limit = limit * (1 + 1e-6))
+    third = prior_joint_attempt(theta2, problem, tier = 3L, coefficient_limit = limit * (1 + 1e-6), coefficient_scale = scale)
+    if (!is.null(third$minimax)) {
+      second = third$minimax
+      theta2 = head(second$par, length(base))
+      limit = third$coefficient_limit
+    }
     joint$coefficient_limit = limit
     stages = c(stages, list(coefficient = second, KL = third))
     theta = third$par
@@ -502,8 +519,7 @@ prior_joint_reconcile = function(object) {
   joint$kl = prior_joint_kl(theta, problem)$value
   joint$reference_used = TRUE
   joint$underdetermined = qr(prior_joint_values(theta, problem)$gradient / problem$units)$rank < length(theta)
-  verified = all(joint$outcome$satisfied) && all(vapply(stages, function(s) s$convergence == 0 && is.finite(s$objective) &&
-    s$violation < 1e-8 && is.finite(s$stationarity) && s$stationarity < 1e-4, logical(1)))
+  verified = all(joint$outcome$satisfied) && all(vapply(stages, prior_joint_stage_verified, logical(1)))
   if (!is.null(joint$coefficient_limit)) {
     achieved = max(c(0, joint$coefficient$normalized_violation))
     bound = joint$coefficient_limit * (1 + 1e-6)
@@ -566,15 +582,25 @@ prior_joint_validate = function(object) {
   invisible(object)
 }
 
+prior_joint_attempted_priors = function(joint) {
+  if (is.null(joint$problem) || length(joint$theta) != 2 * length(joint$problem$mean)) return(list())
+  parameters = prior_joint_parameters(joint$theta, joint$problem)
+  if (any(!is.finite(c(parameters$mean, parameters$sd))) || any(parameters$sd <= 0)) return(list())
+  result = lapply(seq_along(parameters$mean), function(i) list(distribution = "normal",
+    mean = unname(parameters$mean[i]), sd = unname(parameters$sd[i])))
+  stats::setNames(result, names(joint$problem$mean))
+}
+
 prior_joint_diagnostics = function(x, verified = TRUE) {
   object = x$object
   joint = object$joint
   cat("\nTechnical diagnostics (", joint$status, ")\n", sep = "")
-  if (!verified) prior_console_line("Unverified reconciliation: these diagnostics do not establish selected candidate priors.")
+  if (!verified) prior_console_line("Unverified reconciliation: printed available priors are retained fallbacks; attempted evaluations below are not selected priors.")
   print(object)
   if (!is.null(joint$message)) prior_console_line(joint$message)
   if (!is.null(joint$compatibility_note)) prior_console_line(paste("Compatibility check unavailable:", joint$compatibility_note))
   prior_joint_summary_conflict(object, TRUE)
+  if (!verified) cat("\nAttempted outcome evaluations (not selected):\n")
   index = 0L
   for (specification in object$outcomes) {
     cat("\nAt:", if (length(specification$at)) paste(names(specification$at), unlist(specification$at), sep = "=", collapse = ", ") else "intercept only", "\n")
@@ -588,25 +614,37 @@ prior_joint_diagnostics = function(x, verified = TRUE) {
   cat("Discrepancy/tolerance: entered units; residual: discrepancy / numerical tolerance.\n")
   cat("Comparison metric: baseline-SD distances for locations/SDs, probit distances for probabilities.\n")
   cat("Normalized violation: distance outside the tolerance band; zero does not override the raw satisfaction check.\n")
+  attempted = prior_joint_attempted_priors(joint)
+  if (verified) cat("Before -> after: original coefficient prior -> verified reconciled prior.\n")
+  if (!verified) cat("Attempted coefficient belief evaluations are unverified and refer to the attempted priors, not the retained fallbacks.\n")
   for (name in names(joint$problem$mean)) {
     before = joint$baseline[[name]]
-    after = object$selected[[name]]
-    cat(name, ":", prior_format(before), "->", prior_format(after), "\n")
-    cat("  Change in mean:", after$mean - before$mean, "; change in SD:", after$sd - before$sd, "\n")
+    after = if (verified) object$selected[[name]] else attempted[[name]]
+    if (verified) cat(name, ":", prior_format(before), "->", prior_format(after), "\n") else {
+      cat(name, ":\n")
+      cat("  Original coefficient prior:", prior_format(before), "\n")
+      cat("  Retained fallback prior:", prior_format(object$selected[[name]]), "\n")
+      if (!is.null(after)) cat("  Attempted numerical prior (not selected):", prior_format(after), "\n")
+    }
+    if (!is.null(after)) cat(if (verified) "  Change in mean:" else "  Attempted change in mean:",
+      after$mean - before$mean, "; change in SD:", after$sd - before$sd, "\n")
     records = object$beliefs[[name]]
     for (record in records) {
       row = if (is.null(joint$coefficient)) data.frame() else
         joint$coefficient[joint$coefficient$id == record$id, , drop = FALSE]
-      prior_console_line(paste(record$label, if (nrow(row) && row$satisfied) "[satisfied]" else "[relaxed / unresolved]"))
+      prior_console_line(paste(record$label, if (!verified) "[attempted; not selected]" else
+        if (nrow(row) && row$satisfied) "[satisfied]" else "[relaxed / unresolved]"))
       if (nrow(row)) print(row, row.names = FALSE, digits = 8)
     }
   }
   if (!is.null(joint$coefficient_limit)) cat("\nTier-2 maximum dimensionless violation:", joint$coefficient_limit, "\n")
-  if (!is.null(joint$kl)) cat("\nKL(adjusted || baseline):", joint$kl, "\n")
+  if (!is.null(joint$kl)) cat(if (verified) "\nKL(adjusted || baseline):" else "\nKL(attempted || baseline):", joint$kl, "\n")
   cat("Reference anchoring: coefficient-only selections, with backend defaults where not elicited.\n")
   cat("Underdetermined constraints use the stated minimax/KL criterion; numerical search does not certify a unique global optimum.\n")
   for (stage in names(joint$stages)) if (!is.null(joint$stages[[stage]]$message))
     prior_console_line(paste(stage, ":", joint$stages[[stage]]$message))
+  for (stage in names(joint$stages)) if (!is.null(joint$stages[[stage]]$method))
+    prior_console_line(paste(stage, "method:", joint$stages[[stage]]$method))
   if (length(joint$stages)) {
     print(do.call(rbind, lapply(joint$stages, function(s) data.frame(
       convergence = s$convergence, iterations = s$iterations, scaled_violation = s$violation,
