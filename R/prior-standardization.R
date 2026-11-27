@@ -68,6 +68,7 @@ prior_validate_standardized_beliefs = function(object) {
 }
 
 prior_convert_belief = function(record, object, parameter) {
+  if (prior_is_r_squared(record)) return(prior_r_squared_belief(record, object, parameter))
   if (prior_outcome_scale(record$scale)) return(prior_outcome_validate(record, object, parameter))
   if (!identical(record$scale, "standardized")) return(record)
 

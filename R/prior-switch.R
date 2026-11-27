@@ -98,6 +98,7 @@ prior_switch_validate = function(object) {
   }
   if (length(prior_fallback_issues(object))) prior_validate_retained(object)
   if (!isTRUE(object$joint$retained)) prior_joint_validate(object)
+  prior_r_squared_validate(object, allow_fallback = TRUE)
   invisible(object)
 }
 

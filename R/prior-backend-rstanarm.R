@@ -56,7 +56,7 @@ prior_rstanarm_validate = function(object, allow_fallback = FALSE) {
   if (length(families) > 1L) stop("Incompatible coefficient families: ", paste(names(selected), collapse = ", "), ". rstanarm requires one slope prior family.")
   prior_predictive_validate(object, allow_fallback)
   for (name in names(object$beliefs)) {
-    records = object$beliefs[[name]]
+    records = Filter(function(r) !prior_is_r_squared(r), object$beliefs[[name]])
     if (!length(records)) next
     if (allow_fallback && !is.null(object$fallbacks[[name]])) next
     achieved = vapply(records, prior_distribution_target, numeric(1), prior = object$selected[[name]])

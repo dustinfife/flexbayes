@@ -12,7 +12,9 @@
 \item{parameter}{Optional parameter name. When supplied, compare acceptable candidates.}
 
 \item{scale}{Plot in original, standardized, probability, response, odds_ratio
-or rate_ratio units. Ratio plots use a positive log10 x-axis.
+or rate_ratio units. With parameter = 'sigma', r_squared shows the induced
+numerical cumulative distribution under the empirical predictor distribution;
+ordinary sigma density plots are unchanged. Ratio plots use a positive log10 x-axis.
 Outcome scales require the matching GLM centered intercept; ratios require
 an eligible numeric slope. Transformed densities
 include the transformation Jacobian.}

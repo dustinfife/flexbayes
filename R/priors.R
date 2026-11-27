@@ -67,6 +67,7 @@ identify_priors = function(formula, data, family = stats::gaussian(), package = 
   )
   if (family$family != "gaussian") out$parameters$scale = if (family$family == "binomial") "log-odds" else "log-rate"
 
+  if (family$family == "gaussian") out$model$predictor_covariance = prior_predictor_covariance(X)
   out$model$standardization = prior_standardization_metadata(out$model)
   class(out) = "flexbayes_priors"
   if (package == "brms") out$backend$coefficients = prior_brms_design(out)$coefficients
@@ -139,7 +140,9 @@ print.flexbayes_priors = function(x, ...) {
 #' @param diagnostics Include constraint targets, achieved values, standardized
 #'   residuals, and candidate fit scores. Outcome reconciliation additionally
 #'   reports configurations, original and adjusted coefficient priors, relaxed
-#'   beliefs, KL direction, and numerical convergence diagnostics.
+#'   beliefs, KL direction, and numerical convergence diagnostics. R-squared
+#'   beliefs add coefficient/covariance references, numerical verification and
+#'   observed-variance diagnostics that are never fitting constraints.
 #' @param ... Reserved.
 #' @return A summary.flexbayes_priors object, displayed by its print method.
 #' @export
@@ -155,6 +158,7 @@ print.summary.flexbayes_priors = function(x, ...) {
   object = x$object
   diagnostics = x$diagnostics
   print(object)
+  prior_r_squared_summary(object, diagnostics)
   for (name in names(object$beliefs)) {
     records = object$beliefs[[name]]
     if (!length(records) && is.null(object$fallbacks[[name]])) next
@@ -255,7 +259,9 @@ print.summary.flexbayes_priors = function(x, ...) {
 #' @param x Prior specification.
 #' @param parameter Optional parameter name. When supplied, compare acceptable candidates.
 #' @param scale Plot in original, standardized, probability, response, odds_ratio
-#'   or rate_ratio units. Ratio plots use a positive log10 x-axis.
+#'   or rate_ratio units. With parameter = 'sigma', r_squared shows the induced
+#'   numerical cumulative distribution under the empirical predictor distribution;
+#'   ordinary sigma density plots are unchanged. Ratio plots use a positive log10 x-axis.
 #'   Outcome scales require the matching GLM centered intercept; ratios require
 #'   an eligible numeric slope. Transformed densities
 #'   include the transformation Jacobian.
@@ -273,8 +279,12 @@ plot.flexbayes_priors = function(x, parameter = NULL, scale = "original", ...) {
   if (length(scale) != 1L ||
       !is.character(scale) ||
       is.na(scale) ||
-      !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) {
-    stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
+      !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio", "r_squared")) {
+    stop("scale must be original, standardized, probability, response, odds_ratio, rate_ratio or r_squared.")
+  }
+  if (scale == "r_squared") {
+    if (!identical(parameter, "sigma") || !prior_has_sigma(x)) stop("Select parameter = 'sigma' for a Gaussian R-squared plot.")
+    return(prior_r_squared_plot(x))
   }
   factor = 1
   if (prior_outcome_scale(scale)) {

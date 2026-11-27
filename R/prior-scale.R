@@ -179,7 +179,9 @@ prior_fit_scale_family = function(family, records, reference) {
   result
 }
 
-prior_fit_scale_candidates = function(records, reference, backend = "rstanarm") {
+prior_fit_scale_candidates = function(records, reference, backend = "rstanarm", context = NULL) {
+  if (is.null(context) && any(vapply(records, prior_is_r_squared, logical(1)))) stop("R-squared sigma fitting requires the current coefficient and predictor-covariance context.")
+  if (!is.null(context)) return(prior_fit_r_squared_candidates(records, reference, backend, context))
   families = prior_scale_families(backend)
   incompatible = any(vapply(records, function(r) r$type == "mode" && abs(r$target) > r$tolerance, logical(1)))
   if (incompatible && backend == "rstanarm") return(list(valid = FALSE, status = "backend_incompatible",
@@ -192,6 +194,10 @@ prior_fit_scale_candidates = function(records, reference, backend = "rstanarm") 
     result$family = family
     result
   }), families)
+  prior_scale_rank_candidates(alternatives)
+}
+
+prior_scale_rank_candidates = function(alternatives) {
   valid = which(vapply(alternatives, function(c) isTRUE(c$valid), logical(1)))
 
   # Prefer the default exponential, then one-parameter alternatives, then half-t.
@@ -208,6 +214,7 @@ prior_fit_scale_candidates = function(records, reference, backend = "rstanarm") 
 }
 
 prior_scale_summary = function(object, diagnostics) {
+  if (prior_has_r_squared(object)) return(invisible(NULL))
   prior_console_line("These beliefs concern sigma itself: residual standard deviation, not residual errors or expected-response uncertainty.")
   prior = object$selected$sigma
   if (is.null(prior)) return(invisible(NULL))

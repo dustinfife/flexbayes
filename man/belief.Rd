@@ -38,7 +38,7 @@ researcher's uncertainty. See "Matching an answer" below.}
 
 \item{scale}{The scale on which the belief is expressed. Defaults to
 \code{"original"}. Other choices are \code{"standardized"}, \code{"probability"},
-\code{"response"}, \code{"odds_ratio"}, and \code{"rate_ratio"}, with the model and
+\code{"response"}, \code{"odds_ratio"}, \code{"rate_ratio"}, and \code{"r_squared"}, with the model and
 parameter restrictions described below.}
 }
 \value{
@@ -153,6 +153,11 @@ one-unit increase in a plain numeric slope of a Poisson log model.
 For example, \code{belief(mode = 1.5, scale = "rate_ratio")}. The same
 parameter restrictions and positive-target requirements as for
 \code{"odds_ratio"} apply.}
+\item{\code{"r_squared"}}{Probability beliefs about model variance explained,
+supplied for \code{sigma} in Gaussian identity models. For example,
+\code{belief(value > .6, probability = .9, scale = "r_squared")}.
+This integrates coefficient uncertainty under the recorded empirical
+predictor covariance; see Beliefs about model R-squared below.}
 }
 
 Beliefs on different supported scales can be combined for the same parameter.
@@ -204,6 +209,42 @@ mathematical incompatibility. Every original tolerance must still pass.
 Uninformative beliefs such as \code{mode = 0} retain the disclosed default scale.
 Diagnostics retain the original backend default. Expected-outcome
 reconciliation never changes an elicited or default sigma prior.
+}
+
+\subsection{Beliefs about model R-squared}{
+
+For Gaussian identity models, supply \code{belief(value > .60, probability = .90, scale = "r_squared")} to \code{update_priors(parameter = "sigma", ...)} to give
+a 90\% prior chance of explaining more than 60\% of the variation. A statement
+such as \code{belief(value < .70, probability = .50, scale = "r_squared")}
+specifies a median when the induced distribution is continuous. Only
+probability/quantile statements are supported on this scale; not mean, mode
+or SD beliefs. Thresholds must be in \verb{[0, 1]}. Direct sigma beliefs still use
+\code{scale = "original"}, and both kinds can be combined.
+
+Here R-squared is \code{V / (V + sigma^2)}, where
+\verb{V = beta_slope' Sigma_X beta_slope} and \code{Sigma_X} is the sample covariance
+of the original non-intercept model-matrix columns. It uses the empirical
+predictor distribution, including correlations, contrasts and transformations.
+Coefficient uncertainty is integrated; using just coefficient means would
+give a different quantity. The centered intercept contributes no variation.
+This is not sample or adjusted R-squared from a fitted regression, or a
+posterior Bayesian R-squared. The observed-variance shortcut
+\code{SD(Y) * sqrt(1 - R-squared)} is only a diagnostic benchmark, not a constraint.
+
+Sigma is fitted after coefficient/outcome/difference reconciliation. A
+coefficient change reruns sigma elicitation from the same original reference,
+without changing coefficients to satisfy R-squared beliefs. If verification
+fails, the previous complete prior collection is retained and requires
+explicit \code{allow_fallback = TRUE} for use. No beliefs are discarded.
+
+Deterministic quadrature uses common coefficient nodes and integrates sigma
+probabilities analytically. Original tolerances must contain both discrepancy
+and estimated numerical error. Current finite budgets support up to three
+materially uncertain coefficient columns; a conservative tail envelope can
+also verify effectively fixed limits. Larger or poorly resolved problems
+remain numerically unresolved. No tolerance is silently widened and no
+failed numerical search proves mathematical incompatibility. See
+\code{\link[=update_priors]{update_priors()}} for numerical limits and reference conventions.
 }
 
 \subsection{Beliefs about expected outcomes}{

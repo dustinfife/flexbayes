@@ -23,7 +23,7 @@
 #'   researcher's uncertainty. See "Matching an answer" below.
 #' @param scale The scale on which the belief is expressed. Defaults to
 #'   `"original"`. Other choices are `"standardized"`, `"probability"`,
-#'   `"response"`, `"odds_ratio"`, and `"rate_ratio"`, with the model and
+#'   `"response"`, `"odds_ratio"`, `"rate_ratio"`, and `"r_squared"`, with the model and
 #'   parameter restrictions described below.
 #'
 #' @details
@@ -127,6 +127,11 @@
 #'   For example, `belief(mode = 1.5, scale = "rate_ratio")`. The same
 #'   parameter restrictions and positive-target requirements as for
 #'   `"odds_ratio"` apply.}
+#'   \item{`"r_squared"`}{Probability beliefs about model variance explained,
+#'   supplied for `sigma` in Gaussian identity models. For example,
+#'   `belief(value > .6, probability = .9, scale = "r_squared")`.
+#'   This integrates coefficient uncertainty under the recorded empirical
+#'   predictor covariance; see Beliefs about model R-squared below.}
 #' }
 #'
 #' Beliefs on different supported scales can be combined for the same parameter.
@@ -177,6 +182,42 @@
 #' Uninformative beliefs such as `mode = 0` retain the disclosed default scale.
 #' Diagnostics retain the original backend default. Expected-outcome
 #' reconciliation never changes an elicited or default sigma prior.
+#'
+#' ## Beliefs about model R-squared
+#'
+#' For Gaussian identity models, supply `belief(value > .60, probability = .90,
+#' scale = "r_squared")` to `update_priors(parameter = "sigma", ...)` to give
+#' a 90% prior chance of explaining more than 60% of the variation. A statement
+#' such as `belief(value < .70, probability = .50, scale = "r_squared")`
+#' specifies a median when the induced distribution is continuous. Only
+#' probability/quantile statements are supported on this scale; not mean, mode
+#' or SD beliefs. Thresholds must be in `[0, 1]`. Direct sigma beliefs still use
+#' `scale = "original"`, and both kinds can be combined.
+#'
+#' Here R-squared is `V / (V + sigma^2)`, where
+#' `V = beta_slope' Sigma_X beta_slope` and `Sigma_X` is the sample covariance
+#' of the original non-intercept model-matrix columns. It uses the empirical
+#' predictor distribution, including correlations, contrasts and transformations.
+#' Coefficient uncertainty is integrated; using just coefficient means would
+#' give a different quantity. The centered intercept contributes no variation.
+#' This is not sample or adjusted R-squared from a fitted regression, or a
+#' posterior Bayesian R-squared. The observed-variance shortcut
+#' `SD(Y) * sqrt(1 - R-squared)` is only a diagnostic benchmark, not a constraint.
+#'
+#' Sigma is fitted after coefficient/outcome/difference reconciliation. A
+#' coefficient change reruns sigma elicitation from the same original reference,
+#' without changing coefficients to satisfy R-squared beliefs. If verification
+#' fails, the previous complete prior collection is retained and requires
+#' explicit `allow_fallback = TRUE` for use. No beliefs are discarded.
+#'
+#' Deterministic quadrature uses common coefficient nodes and integrates sigma
+#' probabilities analytically. Original tolerances must contain both discrepancy
+#' and estimated numerical error. Current finite budgets support up to three
+#' materially uncertain coefficient columns; a conservative tail envelope can
+#' also verify effectively fixed limits. Larger or poorly resolved problems
+#' remain numerically unresolved. No tolerance is silently widened and no
+#' failed numerical search proves mathematical incompatibility. See
+#' [update_priors()] for numerical limits and reference conventions.
 #'
 #' ## Beliefs about expected outcomes
 #'
@@ -250,8 +291,8 @@ belief = function(expression, probability = NULL, mean = NULL, mode = NULL, sd =
   if (length(scale) != 1L ||
       !is.character(scale) ||
       is.na(scale) ||
-      !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio")) {
-    stop("scale must be original, standardized, probability, response, odds_ratio or rate_ratio.")
+      !scale %in% c("original", "standardized", "probability", "response", "odds_ratio", "rate_ratio", "r_squared")) {
+    stop("scale must be original, standardized, probability, response, odds_ratio, rate_ratio or r_squared.")
   }
 
   # Keep the expression as entered, and identify any supplied moments.
@@ -374,6 +415,7 @@ prior_fit_location_scale = function(records, reference, family = "normal") {
 }
 
 prior_distribution_target = function(record, prior) {
+  if (prior_is_r_squared(record)) stop("R-squared probability requires the current coefficient priors and predictor covariance, not sigma alone.")
   if (prior_outcome_scale(record$scale)) return(prior_outcome_target(record, prior))
   if (record$type != "probability") return(prior_distribution_operation(prior, record$type))
   entry = prior_distribution_registry()[[prior$distribution]]
@@ -394,7 +436,7 @@ prior_apply_parameter = function(object, ..., parameter, remove = integer()) {
   additions = list(...)
   if (any(!vapply(additions, inherits, logical(1), "prior_belief"))) stop("All additions must be belief objects.")
   if (parameter == "sigma" && prior_has_sigma(object) &&
-      any(vapply(additions, function(r) r$scale != "original", logical(1)))) {
+      any(vapply(additions, function(r) !r$scale %in% c("original", "r_squared"), logical(1)))) {
     stop("Sigma beliefs require scale = 'original': they describe the residual standard deviation itself.")
   }
   records = object$beliefs[[parameter]]
@@ -417,6 +459,8 @@ prior_apply_parameter = function(object, ..., parameter, remove = integer()) {
 prior_parameter_candidates = function(object, parameter) {
   records = object$beliefs[[parameter]]
   if (!length(records)) return(list())
+
+  if (parameter == "sigma" && any(vapply(records, prior_is_r_squared, logical(1)))) return(list(status = "r_squared_pending"))
 
   # Mathematical contradictions take precedence over family fitting.
   consistency = if (parameter == "sigma" && prior_has_sigma(object))

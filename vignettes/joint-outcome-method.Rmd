@@ -106,6 +106,120 @@ fallback safeguard is explicitly approved. Nonzero contrasts retain the existing
 feasibility, stationarity and raw-belief checks, including numerical recovery
 for difficult constraint regions; no new optimizer or relaxed tolerance is used.
 
+## Eliciting sigma through model R-squared
+
+A researcher may know how much variation the model should explain without
+having a useful guess for residual SD. For a Gaussian identity model, use
+`update_priors("sigma", belief(..., scale = "r_squared"))`. These are beliefs
+about a derived distribution, not direct beliefs about sigma.
+
+```{r sigma-r-squared}
+r_squared_priors = identify_priors(
+  sale_price ~ sqft + age + bedrooms, data = homes_2024,
+  package = "rstanarm"
+) +
+  update_priors("sigma",
+    belief(value < .70, probability = .50, scale = "r_squared"))
+summary(r_squared_priors)
+```
+
+A 50% probability below .70 specifies a median for a continuous distribution.
+Several probability beliefs can be combined, including direct sigma beliefs on
+`scale = "original"`. Means, modes and SDs on the R-squared scale are deferred.
+A single probability statement does not identify a unique sigma-prior family.
+
+Let $S_X$ be the sample covariance of **all non-intercept columns** of the
+original estimation model matrix, using denominator $n-1$. This preserves
+predictor correlations, contrast coding and supported transformations. It is
+recorded at identification and checked against the original model data. Define
+
+$$
+V=\beta_{slope}^{T}S_X\beta_{slope},\qquad R^2=\frac{V}{V+\sigma^2}.
+$$
+
+This is a population-style variance fraction under the empirical predictor
+distribution. It is not sample OLS R-squared, adjusted R-squared, or posterior
+Bayesian R-squared. The centered intercept is constant across predictor
+configurations and contributes no explained variance. Both coefficient and sigma
+uncertainty matter. Substituting coefficient means would replace the full prior
+by a different distribution, often giving zero explained variance for symmetric
+zero-centered priors.
+
+The current independent Normal or Student's t coefficient priors are held fixed.
+For a given coefficient vector and $0<h<1$,
+
+$$
+P(R^2>h\mid\beta)=F_\sigma\!\left(\sqrt{V(1-h)/h}\right).
+$$
+
+The lower-tail event uses sigma's survival function. This integrates sigma
+analytically, then integrates over the complete shared coefficient vector using
+fixed deterministic nodes. No regression, Stan sampling or posterior estimates
+enter the calculation. Zero explained variance gives R-squared exactly zero;
+strict and inclusive comparisons are then evaluated accordingly.
+
+Sigma candidates retain the existing backend-specific families and preference
+order. Scale is profiled from an informative belief, with bounded shape searches
+for half-t, Gamma and lognormal when needed. Underdetermined half-t candidates
+use reference df = 7; underdetermined Gamma/lognormal candidates reference the
+original default sigma SD. These references are disclosed and are not additional
+expert answers. Lower-ranked families need not be searched after a preferred
+family passes verification. A verified brms-only candidate can trigger the
+existing complete-model package-switch check.
+
+Coefficient, outcome and difference beliefs are resolved **before** R-squared
+elicitation. Sigma is then fitted to all direct and R-squared beliefs together.
+A change in the coefficient collection causes a deterministic sigma refit from
+the same original reference, avoiding anchoring to earlier answers. No coefficient
+prior is changed merely to satisfy R-squared beliefs. A failed dependency refit
+retains the previous complete coherent collection; the new beliefs remain
+recorded and use requires the existing explicit `allow_fallback = TRUE` safeguard.
+Stale coefficient, sigma or model-data metadata blocks ordinary use.
+
+### Numerical accuracy and current limits
+
+Spherical coordinates remove the norm cusp at zero explained effect. Radial
+Gauss-Legendre rules and periodic angular rules use orders 16, 32, 64 and 128;
+Student's t coefficients double the radial order. The domain is truncated using
+a marginal union tail bound of $10^{-10}$. Coefficient-density mass checks and
+successive-order differences estimate the remaining quadrature error. At least
+two refinements must stabilize. Every accepted probability must satisfy
+
+$$
+|\widehat P-P_{requested}|+e_{numerical}\le tolerance,
+\qquad e_{numerical}\le tolerance/8.
+$$
+
+The tail bound is explicit; quadrature error is an estimate, not a formal global
+certificate. Numerical error is distinct from uncertainty expressed by the
+researcher's probability statement. The original default tolerance remains
+`1e-6`. A stricter request is never silently widened.
+
+The initial budget is three materially uncertain coefficient columns, at most
+4,500,000 nodes per rule and 200,000,000 conditional-probability point evaluations
+per search. Scale searches use factors `exp(-30)` to `exp(30)` relative to the
+original default sigma mean. Half-t and positive-family shape searches retain
+finite policy bounds, with deterministic profiling and root/minimum searches.
+An effectively fixed limit can be verified using a conservative coefficient-tail
+envelope, including all remaining coefficient uncertainty. No columns are
+silently discarded. Larger, sharply concentrated or insufficiently resolved
+problems remain **numerically unresolved**, not mathematically incompatible.
+These limits can be expanded later without changing the elicitation API.
+
+`summary(priors, diagnostics = TRUE)` shows the coefficient collection, covariance,
+family comparisons, numerical errors and verification method. It also compares
+implied explained variance with observed outcome variance. At each belief's
+R-squared threshold, `SD(Y)*sqrt(1-R-squared)` provides a diagnostic shortcut.
+That shortcut treats observed outcome variance as total population variance;
+it is **not** the definition used here, an additional fitting constraint, or
+something averaged with the elicited sigma. A discrepancy is not an incompatibility
+certificate.
+
+`plot(priors, parameter = "sigma", scale = "r_squared")` shows the numerical
+cumulative distribution under these priors. `plot(priors, parameter = "sigma")`
+continues to show sigma's marginal density. `check_prior()` still samples the
+selected priors and generates responses on the original outcome scale.
+
 ## Compatibility before reconciliation
 
 A failure of local optimization is not an impossibility certificate. The

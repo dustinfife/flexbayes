@@ -82,7 +82,7 @@ prior_brms_validate_beliefs = function(object, allow_fallback) {
   for (name in names(object$beliefs)) {
     if (allow_fallback && !is.null(object$fallbacks[[name]])) next
     if (!is.null(object$joint) && name != "sigma") next
-    records = object$beliefs[[name]]
+    records = Filter(function(r) !prior_is_r_squared(r), object$beliefs[[name]])
     if (!length(records)) next
     achieved = vapply(records, prior_distribution_target, numeric(1), prior = object$selected[[name]])
     target = vapply(records, `[[`, numeric(1), "target")

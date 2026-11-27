@@ -821,6 +821,7 @@ prior_joint_summary = function(x) {
   if (object$backend$package == "brms") prior_console_line("brms backend; starting priors are proper flexbayes defaults derived from rstanarm, overriding native brms defaults.")
   prior_joint_summary_outcomes(object, ready)
   prior_joint_summary_coefficients(object, ready)
+  prior_r_squared_summary(object, x$diagnostics)
   if (isTRUE(object$joint$retained)) {
     cat("\nAvailable priors (retained; outcome beliefs not reconciled):\n")
     print(object)

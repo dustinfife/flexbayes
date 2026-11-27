@@ -95,6 +95,51 @@
 #' summary(..., diagnostics=TRUE). Incompatible or numerically unresolved outcome
 #' specifications are retained but block check_prior(), as_rstanarm(), as_brms()
 #' and fit() unless retained fallback priors are explicitly approved.
+#' @section Sigma through model R-squared:
+#' Use `update_priors("sigma", belief(value > .6, probability = .9,
+#' scale = "r_squared"))` for Gaussian identity models. These beliefs concern
+#' `beta_slope' Sigma_X beta_slope / (beta_slope' Sigma_X beta_slope + sigma^2)`
+#' under the empirical predictor distribution; `Sigma_X` is frozen at
+#' identification using sample covariance (denominator n - 1). Coefficient priors
+#' remain independent Normal or Student's t as selected, and the intercept is
+#' excluded. Sigma is independent of coefficients in the selected prior model.
+#' Direct sigma and R-squared beliefs constrain the same sigma prior jointly.
+#'
+#' Coefficients, outcome and difference beliefs are resolved first. Sigma is
+#' then refitted deterministically if its beliefs or coefficient context change,
+#' starting from the same backend reference rather than the previous answer.
+#' This avoids history-dependent anchoring. A failed refit retains the previous
+#' complete collection and reports unresolved beliefs. Removing R-squared beliefs
+#' restores ordinary sigma elicitation. Backend family restrictions and automatic
+#' brms migration still apply; coefficients are never adjusted for R-squared.
+#'
+#' The numerical method uses spherical Gauss-Legendre and periodic quadrature,
+#' with analytic conditional sigma CDFs. Common nodes are shared across trials.
+#' Orders 16, 32, 64 and 128, a marginal union tail bound of 1e-10, coefficient
+#' density mass checks and successive-order differences control estimated error.
+#' Success requires discrepancy plus estimated error inside every original
+#' tolerance, and numerical error at most one eighth of each R-squared tolerance.
+#' These are numerical estimates, not formal global integration certificates.
+#' Computation is bounded at three materially varying coefficient columns,
+#' 4500000 nodes per rule and 200000000 conditional-probability point evaluations
+#' per search. Student's t coefficients use twice as many radial nodes. An
+#' effectively fixed coefficient limit is used only with a conservative tail
+#' envelope that accounts for the remaining coefficient uncertainty.
+#'
+#' Scale searches span exp(-30) to exp(30) times the original default sigma
+#' mean. Shape searches are finite: half-t uses the existing positive-df policy
+#' up to 1e6, Gamma/lognormal use log-shape `[-12,12]`. A single informative belief
+#' uses reference df = 7 for half-t; underdetermined Gamma/lognormal candidates
+#' retain the default sigma SD. Families retain their existing deterministic
+#' preference order. Lower-ranked families need not be searched once a preferred
+#' family is verified. One probability belief does not identify a unique family.
+#' Stricter tolerances or exhausted budgets can leave a problem unresolved;
+#' unsuccessful searches are not mathematical incompatibility certificates.
+#' `summary(..., diagnostics = TRUE)` shows coefficient/covariance references,
+#' verification errors, family comparisons and an optional observed-variance
+#' benchmark. Observed outcome variance is never added as a fitting constraint.
+#' Use `plot(priors, parameter = "sigma", scale = "r_squared")` for its numerical
+#' cumulative distribution; ordinary sigma-density plots are unchanged.
 #' @return update_priors() returns a flexbayes_prior_update specification.
 #'   Adding it to a flexbayes_priors object returns a revised prior object.
 #'   Neither input is modified. Unsupported or incompatible beliefs retain the

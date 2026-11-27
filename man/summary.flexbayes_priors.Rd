@@ -12,7 +12,9 @@
 \item{diagnostics}{Include constraint targets, achieved values, standardized
 residuals, and candidate fit scores. Outcome reconciliation additionally
 reports configurations, original and adjusted coefficient priors, relaxed
-beliefs, KL direction, and numerical convergence diagnostics.}
+beliefs, KL direction, and numerical convergence diagnostics. R-squared
+beliefs add coefficient/covariance references, numerical verification and
+observed-variance diagnostics that are never fitting constraints.}
 
 \item{...}{Reserved.}
 }

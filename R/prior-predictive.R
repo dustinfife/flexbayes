@@ -81,6 +81,7 @@ prior_predictive_validate = function(object, allow_fallback = FALSE) {
   issues = prior_fallback_permission(object, allow_fallback)
   if (length(issues)) prior_validate_retained(object)
   if (!isTRUE(object$joint$retained)) prior_joint_validate(object)
+  prior_r_squared_validate(object, allow_fallback)
   prior_validate_standardized_beliefs(object)
   required = prior_required_parameters(object)
   if (!all(required %in% names(object$selected))) stop("Required prior is missing.")

@@ -55,7 +55,7 @@ prior_record_success = function(object) {
   object
 }
 
-prior_select_compatible = function(object) {
+prior_select_base = function(object) {
   object = prior_retention_initialize(object)
   previous = object$selected
   previous_fallbacks = object$fallbacks
@@ -149,7 +149,7 @@ prior_fallback_summary = function(object, name, diagnostics) {
   reason = if (diagnostics || retained$status == "contradictory") retained$reason else
     switch(retained$status,
       no_supported_fit = paste("No supported prior was verified to satisfy all current beliefs for", name, "."),
-      backend_incompatible = if (name == "sigma" && prior_has_sigma(object))
+      backend_incompatible = if (name == "sigma" && prior_has_r_squared(object)) retained$reason else if (name == "sigma" && prior_has_sigma(object))
         "The supported sigma families have mode zero; the requested mode is backend-incompatible." else
         "rstanarm requires one shared slope-prior family; the current candidate cannot be combined with the other priors.",
       incompatible = "Outcome beliefs are mathematically incompatible with the supported model.",
