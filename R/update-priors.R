@@ -1,11 +1,12 @@
-#' Incorporate parameter or expected-outcome beliefs
+#' Incorporate parameter, expected-outcome, or expected-difference beliefs
 #'
 #' Construct a reusable specification and add it to a prior object with `+`.
 #' Specifications do not fit distributions until applied. Addition delegates to
 #' the existing parameter-fitting or joint-reconciliation machinery, preserving
 #' existing beliefs and diagnostics.
-#' Supply exactly one target: parameter for an individual prior, or outcome for
-#' the conditional expected response at specified predictor values. Outcome
+#' Supply exactly one target: parameter for an individual prior, outcome for
+#' the conditional expected response, or difference for the change between
+#' two expected responses. Outcome and difference
 #' beliefs reconcile jointly and may explicitly relax coefficient beliefs. Updating a
 #' coefficient recomputes reconciliation from its coefficient-only baseline.
 #' Chain updates as `priors + update_priors(...) + update_priors(...)`.
@@ -31,11 +32,17 @@
 #' @param outcome Named list with one finite numeric value for every predictor.
 #'   Beliefs concern the conditional expected response, not individual noisy
 #'   observations. For an intercept-only model use list(). Supply either this
-#'   argument or parameter, never both. Control argument names must match exactly.
+#'   argument, parameter, or difference. Control argument names must match exactly.
+#' @param difference Named list containing from and to, each a predictor
+#'   configuration with the same requirements as outcome. Beliefs describe
+#'   the conditional expected response at to minus that at from. Both responses
+#'   share the same coefficients; residual variability is excluded. Exactly one
+#'   of parameter, outcome, or difference must be supplied.
 #' @param ... Objects constructed by belief(). May be empty for removal-only updates.
 #' @param remove Unique positive integer positions of existing beliefs to remove.
 #'   Defaults to integer() (none). Positions must be in range when applied.
-#'   Only parameter targets support removal; do not supply remove with outcome.
+#'   Only parameter targets support removal; do not supply remove with outcome
+#'   or difference.
 #' @section Expected-outcome reconciliation:
 #' Initially supports Gaussian identity models with an intercept,
 #' numeric predictors, and selected independent Normal coefficient priors.
@@ -44,7 +51,14 @@
 #' expected-outcome reconciliation never adjusts sigma. The existing centered
 #' intercept is retained; independence refers to that parameterization.
 #'
-#' Reconciliation has three priorities: satisfy outcome beliefs within their
+#' Differences use the contrast between the two centered model-matrix rows.
+#' The intercept and unchanged model-matrix columns cancel. Uncertainty uses
+#' the shared coefficient vector, not the sum of independent endpoint variances.
+#' Identical rows imply exactly zero, including strict versus inclusive
+#' probability comparisons. Incompatible zero-difference beliefs are retained
+#' and reported as mathematical incompatibility.
+#'
+#' Reconciliation has three priorities: satisfy outcome and difference beliefs within their
 #' tolerances; minimize the largest coefficient-belief violation beyond its
 #' tolerance in dimensionless coordinates; then minimize
 #' KL(adjusted prior || baseline prior). Locations and SDs use baseline-SD
@@ -91,29 +105,47 @@
 #' replacement = update_priors("x", belief(sd = .5), remove = 2)
 #' expected = update_priors(outcome = list(x = 2), belief(mode = 10),
 #'   belief(value < 8, probability = .05))
+#' # An agent expects a 50000 price difference over 300 square feet and
+#' # gives a 10% chance that the expected difference exceeds 90000.
+#' # There is no need to convert these answers into a slope by hand.
+#' houses = identify_priors(sale_price ~ age + sqft + bedrooms,
+#'   data = homes_2024, package = "rstanarm") +
+#'   update_priors(
+#'     difference = list(
+#'       from = list(sqft = 1700, age = 44, bedrooms = 3),
+#'       to = list(sqft = 2000, age = 44, bedrooms = 3)),
+#'     belief(mode = 50000),
+#'     belief(value > 90000, probability = .10))
+#' summary(houses)
 #' \dontrun{
 #' priors = identify_priors(y ~ x + z, data = d) +
 #'   change +
 #'   update_priors("z", belief(mode = -1))
 #' }
 #' @export
-update_priors = function(..., parameter = NULL, outcome = NULL, remove = integer()) {
+update_priors = function(..., parameter = NULL, outcome = NULL, difference = NULL, remove = integer()) {
   beliefs = list(...)
   has_parameter = !missing(parameter)
   has_outcome = !missing(outcome)
+  has_difference = !missing(difference)
 
   # All control arguments match exactly after dots. Recognize only the leading
   # unnamed parameter shorthand; outcome calls keep every belief in dots.
   unnamed_first = length(beliefs) && (is.null(names(beliefs)) || !nzchar(names(beliefs)[1]))
   positional = unnamed_first && (is.character(beliefs[[1]]) ||
-    (!has_parameter && !has_outcome && !inherits(beliefs[[1]], "prior_belief")))
+    (!has_parameter && !has_outcome && !has_difference && !inherits(beliefs[[1]], "prior_belief")))
   if (positional) {
     if (has_parameter) stop("Supply parameter only once, either positionally or by name.")
     parameter = beliefs[[1]]
     beliefs = beliefs[-1]
     has_parameter = TRUE
   }
-  if (has_parameter == has_outcome) stop("Supply exactly one of parameter or outcome, using exact argument names.")
+  if (sum(has_parameter, has_outcome, has_difference) != 1L) stop("Supply exactly one of parameter, outcome, or difference, using exact argument names.")
+  if (has_difference) {
+    if (!missing(remove)) stop("remove applies only to parameter beliefs; difference removal is not supported.")
+    specification = prior_difference_update(difference, beliefs)
+    return(structure(c(list(target = "difference"), specification), class = "flexbayes_prior_update"))
+  }
   if (has_outcome) {
     if (!missing(remove)) stop("remove applies only to parameter beliefs; outcome removal is not supported.")
     specification = prior_outcome_update(outcome, beliefs)
@@ -134,7 +166,7 @@ update_priors = function(..., parameter = NULL, outcome = NULL, remove = integer
     stop("Use a flexbayes_priors object on the left and an update_priors() specification on the right.")
   }
 
-  if (identical(e2$target, "outcome")) return(prior_maybe_switch_package(prior_apply_outcome(e1, e2)))
+  if (e2$target %in% c("outcome", "difference")) return(prior_maybe_switch_package(prior_apply_outcome(e1, e2)))
   if (!identical(e2$target, "parameter")) stop("Unknown update target; construct a specification with update_priors().")
 
   # Unname the list so a belief argument cannot masquerade as parameter/remove.

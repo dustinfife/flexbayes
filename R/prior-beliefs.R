@@ -188,7 +188,14 @@
 #' These statements concern the expected response, not an individual noisy
 #' observation. Reconciliation can change coefficient priors and compromise
 #' earlier coefficient beliefs; their original statements remain available.
-#' See [update_priors()] for the reconciliation priorities and limitations.
+#' To describe a change between expected responses, use the difference target:
+#' `update_priors(difference = list(from = list(x = 1), to = list(x = 2)),
+#' belief(mode = 10))`. This says the expected response increases by 10,
+#' not that two individual observations differ by 10. Both configurations share
+#' the same coefficients; sigma is excluded. Difference beliefs support the
+#' same original-scale mean, mode and probability statements and Gaussian
+#' restrictions as outcome beliefs. They reconcile jointly with outcome and
+#' coefficient beliefs. See [update_priors()] for priorities and limitations.
 #'
 #' @return A `prior_belief` record that can be supplied to [update_priors()].
 #' @seealso [identify_priors()], [plot.flexbayes_priors()], [check_prior()]

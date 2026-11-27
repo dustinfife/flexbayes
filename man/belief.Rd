@@ -216,7 +216,13 @@ mean, mode, and probability beliefs are supported there, not SD beliefs.
 These statements concern the expected response, not an individual noisy
 observation. Reconciliation can change coefficient priors and compromise
 earlier coefficient beliefs; their original statements remain available.
-See \code{\link[=update_priors]{update_priors()}} for the reconciliation priorities and limitations.
+To describe a change between expected responses, use the difference target:
+\code{update_priors(difference = list(from = list(x = 1), to = list(x = 2)), belief(mode = 10))}. This says the expected response increases by 10,
+not that two individual observations differ by 10. Both configurations share
+the same coefficients; sigma is excluded. Difference beliefs support the
+same original-scale mean, mode and probability statements and Gaussian
+restrictions as outcome beliefs. They reconcile jointly with outcome and
+coefficient beliefs. See \code{\link[=update_priors]{update_priors()}} for priorities and limitations.
 }
 }
 \examples{

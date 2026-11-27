@@ -3,6 +3,8 @@
 # not establish feasibility of the complete mean/variance problem.
 prior_joint_moment_bounds = function(problem) {
   scale = sqrt(as.vector(problem$X^2 %*% problem$sd^2))
+  # Zero contrasts are checked exactly before moment bounds; use a finite unit.
+  scale[scale == 0] = 1
   reference = as.vector(problem$X %*% problem$mean)
   lower = rep(0, nrow(problem$X))
   upper = rep(Inf, nrow(problem$X))
@@ -10,6 +12,7 @@ prior_joint_moment_bounds = function(problem) {
 
   # Combine answers entered separately at the same centered predictor values.
   for (i in seq_len(nrow(problem$X))) {
+    if (all(problem$X[i, ] == 0)) { upper[i] = 0; next }
     same = which(apply(problem$X, 1, function(row) identical(unname(row), unname(problem$X[i, ]))))
     indices = which(vapply(problem$outcome, function(r) r$configuration %in% same, logical(1)))
     lo = hi = matrix(numeric(), ncol = 3, dimnames = list(NULL, c("Intercept", "SD_slope", "Record")))
@@ -133,7 +136,7 @@ prior_joint_compatibility = function(problem) {
   # First look for a simple pairwise variance bound that explains the conflict.
   squared = problem$X^2
   for (i in seq_len(nrow(squared))) for (j in seq_len(nrow(squared))) {
-    if (i == j || any(squared[j, ] == 0 & squared[i, ] > 0)) next
+    if (i == j || !any(squared[j, ] > 0) || any(squared[j, ] == 0 & squared[i, ] > 0)) next
     active = squared[j, ] > 0
     cap = max(squared[i, active] / squared[j, active])
     required = bounds$lower[i] * bounds$scale[i]
@@ -197,9 +200,13 @@ prior_joint_summary_conflict = function(object, detailed = FALSE) {
     records = which(vapply(object$joint$problem$outcome, function(r) r$configuration == configuration, logical(1)))
     numbers = match(intersect(certificate$records, records), records)
     specification = object$outcomes[[configuration]]
-    at = if (length(specification$at)) paste(names(specification$at),
-      vapply(specification$at, prior_joint_summary_number, character(1)), sep = " = ", collapse = ", ") else "intercept only"
-    prior_console_line(paste0("Configuration ", configuration, " (", at, "): beliefs ", paste(numbers, collapse = ", "), "."))
+    if (is.null(specification$difference)) {
+      at = prior_joint_configuration_text(specification$at)
+      prior_console_line(paste0("Configuration ", configuration, " (", at, "): beliefs ", paste(numbers, collapse = ", "), "."))
+    } else {
+      prior_console_line(paste0("Difference configuration ", configuration, ": beliefs ", paste(numbers, collapse = ", "), "."))
+      prior_joint_summary_configuration(specification)
+    }
   }
   if (!is.null(certificate$ratio)) {
     ratio = certificate$ratio

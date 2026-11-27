@@ -1,7 +1,7 @@
 test_that("exactly one target is required and control names match exactly", {
   b = belief(mode = 2)
-  expect_error(update_priors(), "exactly one of parameter or outcome")
-  expect_error(update_priors(b), "exactly one of parameter or outcome")
+  expect_error(update_priors(), "exactly one of parameter, outcome, or difference")
+  expect_error(update_priors(b), "exactly one of parameter, outcome, or difference")
   expect_error(update_priors(parameter = "x", outcome = list(x = 1), b), "exactly one")
   expect_error(update_priors("x", outcome = list(x = 1), b), "exactly one")
   expect_error(update_priors("x", parameter = "x", b), "parameter only once")

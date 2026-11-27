@@ -1,13 +1,13 @@
 # Validate an expected-response specification before joint reconciliation.
-prior_outcome_update = function(at, records) {
+prior_outcome_update = function(at, records, target = "outcome") {
   # Validate the configuration without changing any of the supplied answers.
   if (!is.list(at) || length(at) && (is.null(names(at)) || anyNA(names(at)) ||
       any(!nzchar(names(at))) || anyDuplicated(names(at)))) {
-    stop("outcome must be a uniquely named list.")
+    stop(target, " must be a uniquely named list.")
   }
   if (any(!vapply(at, function(x) is.numeric(x) && !is.complex(x) && length(x) == 1L &&
       is.null(dim(x)) && is.finite(x), logical(1)))) {
-    stop("Each predictor configuration value must be one finite number.")
+    stop("Each predictor configuration value in ", target, " must be one finite number.")
   }
 
   # Outcome beliefs concern expected responses, not individual observations.
@@ -24,7 +24,10 @@ prior_apply_outcome = function(object, specification) {
     specification$beliefs[[i]]$id = object$next_id
     object$next_id = object$next_id + 1L
   }
-  object$outcomes = c(object$outcomes, list(list(at = specification$at, beliefs = specification$beliefs)))
+  record = if (identical(specification$target, "difference"))
+    list(difference = specification$difference, beliefs = specification$beliefs) else
+    list(at = specification$at, beliefs = specification$beliefs)
+  object$outcomes = c(object$outcomes, list(record))
   prior_select_compatible(object)
 }
 
@@ -44,12 +47,12 @@ prior_joint_design = function(object, specifications) {
   }
 
   rows = lapply(specifications, function(specification) {
-    if (!setequal(names(specification$at), variables)) stop("outcome must specify exactly these predictors: ", paste(variables, collapse = ", "))
-    data = if (length(variables)) as.data.frame(specification$at) else data.frame(row.names = 1L)
-    X = prior_prediction_matrix(object, data)
-    slopes = setdiff(colnames(X), "(Intercept)")
-    X[, slopes] = sweep(X[, slopes, drop = FALSE], 2, object$model$reference[slopes], "-")
-    X
+    if (!is.null(specification$difference)) {
+      from = prior_joint_configuration(object, specification$difference$from, variables, "difference$from")
+      to = prior_joint_configuration(object, specification$difference$to, variables, "difference$to")
+      return(to - from)
+    }
+    prior_joint_configuration(object, specification$at, variables, "outcome")
   })
   do.call(rbind, rows)
 }
@@ -76,6 +79,10 @@ prior_joint_values = function(theta, problem, coefficient = FALSE) {
     variance = sum((row * parameters$sd)^2)
     sd = sqrt(variance)
     mean_gradient = row * problem$sd
+    if (all(row == 0)) {
+      value[i] = prior_joint_constant_value(record)
+      next
+    }
     if (record$type %in% c("mean", "mode")) {
       value[i] = mean
       gradient[i, seq_len(p)] = mean_gradient
@@ -146,6 +153,8 @@ prior_joint_system = function(theta, problem, tier, coefficient_limit = 0, coeff
   # A small interior margin protects final checks from floating-point rounding.
   # Retry without it when the tolerance boxes have only a narrow intersection.
   width = tolerance * (1 - problem$interior)
+  constant = vapply(problem$outcome, function(r) all(problem$X[r$configuration, ] == 0), logical(1))
+  width[constant] = tolerance[constant]
   g = c((difference - width) / problem$units, (-difference - width) / problem$units)
   jacobian = rbind(outcome$gradient / problem$units, -outcome$gradient / problem$units)
   if (length(problem$coefficient) && tier != 1L) {
@@ -308,9 +317,9 @@ prior_joint_problem = function(object) {
     coefficient = c(coefficient, list(record))
   }
   variance = as.vector(X^2 %*% sd^2)
-  units = vapply(outcome, function(r) if (r$type == "probability") 1 else sqrt(variance[r$configuration]), numeric(1))
+  units = vapply(outcome, function(r) if (r$type == "probability") 1 else if (variance[r$configuration] == 0) 1 else sqrt(variance[r$configuration]), numeric(1))
   coefficient_units = vapply(coefficient, function(r) if (r$type == "probability") 1 else sd[r$parameter], numeric(1))
-  list(
+  problem = list(
     X = X,
     mean = mean,
     sd = sd,
@@ -321,10 +330,23 @@ prior_joint_problem = function(object) {
     baseline = baseline,
     interior = .001
   )
+  if (any(vapply(object$outcomes, function(specification) !is.null(specification$difference), logical(1)))) problem$has_difference = TRUE
+  problem
 }
 
 prior_joint_basic_compatibility = function(problem) {
   for (i in seq_len(nrow(problem$X))) {
+    if (all(problem$X[i, ] == 0)) {
+      indices = which(vapply(problem$outcome, function(r) r$configuration == i, logical(1)))
+      bad = indices[vapply(problem$outcome[indices], function(r)
+        abs(prior_joint_constant_value(r) - r$target) > r$tolerance, logical(1))]
+      if (length(bad)) return(list(issue = "zero contrast",
+        message = "Difference beliefs are incompatible: these configurations have an expected difference of exactly zero.",
+        configurations = i, records = bad,
+        explanation = "The model-matrix contrast is zero. The expected difference has no uncertainty; residual noise is not included.",
+        technical = list(method = "Deterministic zero contrast", contrast = problem$X[i, ])))
+      next
+    }
     rows = which(apply(problem$X, 1, function(x) identical(unname(x), unname(problem$X[i, ]))))
     records = Filter(function(r) r$configuration %in% rows, problem$outcome)
     check = prior_check_probability_constraints(records)
@@ -357,7 +379,8 @@ prior_joint_basic_compatibility = function(problem) {
       }
     }
   }
-  location = Filter(function(r) r$type %in% c("mean", "mode"), problem$outcome)
+  location = Filter(function(r) r$type %in% c("mean", "mode") &&
+    any(problem$X[r$configuration, ] != 0), problem$outcome)
   if (!length(location)) return(NULL)
   A = problem$X[vapply(location, `[[`, integer(1), "configuration"), , drop = FALSE]
   b = vapply(location, `[[`, numeric(1), "target")
@@ -426,7 +449,9 @@ prior_joint_details = function(problem, theta, coefficient = FALSE) {
 # Boundary probability targets use an interior starting point of the declared
 # acceptance band. Verification still uses the original target and tolerance.
 prior_joint_start = function(problem) {
+  problem = prior_joint_ordered_problem(problem)
   targets = vapply(problem$outcome, function(r) {
+    if (all(problem$X[r$configuration, ] == 0)) return(0)
     if (r$type != "probability") return(r$target)
     probability = r$target
     if (probability <= 0 || probability >= 1) {
@@ -443,6 +468,7 @@ prior_joint_start = function(problem) {
 }
 
 prior_joint_attempt = function(start, problem, ...) {
+  problem = prior_joint_ordered_problem(problem)
   tryCatch(prior_joint_solve(start, problem, ...), error = function(error)
     list(par = start, convergence = 1L, iterations = 0L, violation = Inf, objective = Inf,
       stationarity = Inf, message = conditionMessage(error)))
@@ -602,8 +628,13 @@ prior_joint_diagnostics = function(x, verified = TRUE) {
   prior_joint_summary_conflict(object, TRUE)
   if (!verified) cat("\nAttempted outcome evaluations (not selected):\n")
   index = 0L
-  for (specification in object$outcomes) {
-    cat("\nAt:", if (length(specification$at)) paste(names(specification$at), unlist(specification$at), sep = "=", collapse = ", ") else "intercept only", "\n")
+  for (configuration in seq_along(object$outcomes)) {
+    specification = object$outcomes[[configuration]]
+    prior_joint_summary_configuration(specification)
+    if (!is.null(specification$difference)) {
+      cat("Model-matrix contrast (to - from):\n")
+      print(joint$design[configuration, , drop = FALSE])
+    }
     for (record in specification$beliefs) {
       index = index + 1L
       prior_console_line(record$label)
@@ -683,15 +714,14 @@ prior_joint_summary_outcomes = function(object, ready) {
   cat("\nOutcome:", outcome, "\n")
   index = 0L
   for (specification in object$outcomes) {
-    at = if (length(specification$at)) paste(names(specification$at),
-      vapply(specification$at, prior_joint_summary_number, character(1)), sep = " = ", collapse = ", ") else "intercept only"
-    prior_console_line(paste("At:", at))
+    if (!is.null(specification$difference)) cat("\nDifference in expected", outcome, "(to - from)\n")
+    prior_joint_summary_configuration(specification)
     rows = list()
     for (record in specification$beliefs) {
       index = index + 1L
       achieved = if (ready) prior_joint_summary_number(object$joint$outcome$achieved[index],
         probability = record$type == "probability") else "Not verified"
-      label = prior_joint_summary_belief(record, paste("expected", outcome))
+      label = prior_joint_summary_belief(record, if (!is.null(specification$difference)) "expected difference" else paste("expected", outcome))
       if (!is.null(object$joint$compatibility)) label = paste0(length(rows) + 1L, ". ", label)
       rows[[length(rows) + 1L]] = data.frame(
         Belief = label,

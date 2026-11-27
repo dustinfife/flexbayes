@@ -2,9 +2,15 @@
 % Please edit documentation in R/update-priors.R
 \name{update_priors}
 \alias{update_priors}
-\title{Incorporate parameter or expected-outcome beliefs}
+\title{Incorporate parameter, expected-outcome, or expected-difference beliefs}
 \usage{
-update_priors(..., parameter = NULL, outcome = NULL, remove = integer())
+update_priors(
+  ...,
+  parameter = NULL,
+  outcome = NULL,
+  difference = NULL,
+  remove = integer()
+)
 }
 \arguments{
 \item{...}{Objects constructed by belief(). May be empty for removal-only updates.}
@@ -15,11 +21,18 @@ May also be supplied as the first unnamed argument.}
 \item{outcome}{Named list with one finite numeric value for every predictor.
 Beliefs concern the conditional expected response, not individual noisy
 observations. For an intercept-only model use list(). Supply either this
-argument or parameter, never both. Control argument names must match exactly.}
+argument, parameter, or difference. Control argument names must match exactly.}
+
+\item{difference}{Named list containing from and to, each a predictor
+configuration with the same requirements as outcome. Beliefs describe
+the conditional expected response at to minus that at from. Both responses
+share the same coefficients; residual variability is excluded. Exactly one
+of parameter, outcome, or difference must be supplied.}
 
 \item{remove}{Unique positive integer positions of existing beliefs to remove.
 Defaults to integer() (none). Positions must be in range when applied.
-Only parameter targets support removal; do not supply remove with outcome.}
+Only parameter targets support removal; do not supply remove with outcome
+or difference.}
 }
 \value{
 update_priors() returns a flexbayes_prior_update specification.
@@ -32,8 +45,9 @@ Construct a reusable specification and add it to a prior object with \code{+}.
 Specifications do not fit distributions until applied. Addition delegates to
 the existing parameter-fitting or joint-reconciliation machinery, preserving
 existing beliefs and diagnostics.
-Supply exactly one target: parameter for an individual prior, or outcome for
-the conditional expected response at specified predictor values. Outcome
+Supply exactly one target: parameter for an individual prior, outcome for
+the conditional expected response, or difference for the change between
+two expected responses. Outcome and difference
 beliefs reconcile jointly and may explicitly relax coefficient beliefs. Updating a
 coefficient recomputes reconciliation from its coefficient-only baseline.
 Chain updates as \code{priors + update_priors(...) + update_priors(...)}.
@@ -64,7 +78,14 @@ unsupported. Sigma priors can be elicited separately with update_priors();
 expected-outcome reconciliation never adjusts sigma. The existing centered
 intercept is retained; independence refers to that parameterization.
 
-Reconciliation has three priorities: satisfy outcome beliefs within their
+Differences use the contrast between the two centered model-matrix rows.
+The intercept and unchanged model-matrix columns cancel. Uncertainty uses
+the shared coefficient vector, not the sum of independent endpoint variances.
+Identical rows imply exactly zero, including strict versus inclusive
+probability comparisons. Incompatible zero-difference beliefs are retained
+and reported as mathematical incompatibility.
+
+Reconciliation has three priorities: satisfy outcome and difference beliefs within their
 tolerances; minimize the largest coefficient-belief violation beyond its
 tolerance in dimensionless coordinates; then minimize
 KL(adjusted prior || baseline prior). Locations and SDs use baseline-SD
@@ -109,6 +130,18 @@ removal = update_priors("x", remove = 2)
 replacement = update_priors("x", belief(sd = .5), remove = 2)
 expected = update_priors(outcome = list(x = 2), belief(mode = 10),
   belief(value < 8, probability = .05))
+# An agent expects a 50000 price difference over 300 square feet and
+# gives a 10\% chance that the expected difference exceeds 90000.
+# There is no need to convert these answers into a slope by hand.
+houses = identify_priors(sale_price ~ age + sqft + bedrooms,
+  data = homes_2024, package = "rstanarm") +
+  update_priors(
+    difference = list(
+      from = list(sqft = 1700, age = 44, bedrooms = 3),
+      to = list(sqft = 2000, age = 44, bedrooms = 3)),
+    belief(mode = 50000),
+    belief(value > 90000, probability = .10))
+summary(houses)
 \dontrun{
 priors = identify_priors(y ~ x + z, data = d) +
   change +

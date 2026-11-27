@@ -23,6 +23,7 @@ prior_joint_face_system = function(x, face) {
 
   for (record in problem$outcome) {
     row = problem$X[record$configuration, ]
+    if (all(row == 0)) next
     location = sum(row * mean)
     variance_weights = (row * face$sd)^2
     spread = sqrt(sum(variance_weights * r^2))

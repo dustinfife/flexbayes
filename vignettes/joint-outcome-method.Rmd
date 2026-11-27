@@ -18,7 +18,7 @@ The residual-scale distribution is not optimized. Offsets are already
 unsupported by `identify_priors()`.
 
 The existing frozen model terms and prediction-matrix builder construct each
-configuration's row. All original predictors must be supplied once in `at`;
+configuration's row. All original predictors must be supplied once in `outcome`;
 transformations and interactions are evaluated using those terms. Columns
 are aligned with the original coefficients. For slope columns, their original
 model-matrix means are subtracted, matching rstanarm's centered intercept.
@@ -40,6 +40,71 @@ boundary target is evaluated against its declared positive acceptance band;
 it is not claimed to be attained exactly. An interior point of that band may
 initialize the search without changing the recorded answer. No residual noise
 is added to these calculations.
+
+## Differences between expected outcomes
+
+Use `update_priors(difference = list(from = ..., to = ...), ...)` when the
+researcher knows a change rather than an absolute expected response. The same
+Gaussian, numeric-predictor and independent-Normal restrictions apply. Each
+endpoint must supply every original predictor. Supported numeric transformations
+and interactions are evaluated by the original model terms at both endpoints;
+categorical configurations, GLMs and hierarchical models remain unsupported.
+
+The design row becomes $c=x_{to}-x_{from}$, so
+
+$$
+\Delta=c^T\beta,\qquad E(\Delta)=c^T\mu,\qquad
+\operatorname{Var}(\Delta)=\sum_j c_j^2s_j^2.
+$$
+
+Both endpoints use the **same coefficient vector**. Adding their variances
+would wrongly omit their covariance. The centered intercept cancels, as do
+unchanged model-matrix columns. With an interaction, changing one original
+predictor can change several columns. Sigma never enters this calculation:
+these are differences between expected responses, not individual observations.
+
+For example, an agent expects a 50000 price increase between otherwise comparable
+1700- and 2000-square-foot houses, with a 10% chance that the expected increase
+exceeds 90000. The agent can enter those answers directly:
+
+```{r expected-difference}
+library(flexbayes)
+difference_priors = identify_priors(
+  sale_price ~ age + sqft + bedrooms, data = homes_2024,
+  package = "rstanarm"
+) +
+  update_priors(
+    difference = list(
+      from = list(sqft = 1700, age = 44, bedrooms = 3),
+      to = list(sqft = 2000, age = 44, bedrooms = 3)),
+    belief(mode = 50000),
+    belief(value > 90000, probability = .10))
+summary(difference_priors)
+```
+
+Here $\Delta=300\beta_{sqft}$. At the nominal targets the implied slope mean
+is $50000/300=166.6667$ and its SD is
+$40000/[300\Phi^{-1}(.9)]=104.0406$. Numerical acceptance still uses each
+original belief's tolerance. Other coefficient priors need not be elicited first;
+the proper starting priors provide the KL reference.
+
+Outcome and difference specifications share one joint problem and the same three
+priorities described below. Adding a difference does not sequentially anchor
+later updates to its adjusted priors. Coefficient-only selections remain the
+baseline. Problems containing differences use a canonical constraint order for
+initialization and solving, so addition order does not alter numerical search.
+Original belief positions and configuration order remain intact for reporting.
+Summaries identify both endpoints and the requested and achieved
+expected differences; technical diagnostics also show the contrast rows.
+
+A zero model-matrix contrast is handled exactly: its expected difference is
+always zero, with no uncertainty. Strict and inclusive comparisons then differ:
+$P(\Delta<0)=0$ but $P(\Delta\le0)=1$. A belief whose acceptance band excludes
+the deterministic value is mathematically incompatible, not a failed numerical
+search. Such beliefs remain recorded and block use unless the existing retained
+fallback safeguard is explicitly approved. Nonzero contrasts retain the existing
+feasibility, stationarity and raw-belief checks, including numerical recovery
+for difficult constraint regions; no new optimizer or relaxed tolerance is used.
 
 ## Compatibility before reconciliation
 
