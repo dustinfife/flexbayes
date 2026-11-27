@@ -741,8 +741,8 @@ prior_joint_summary_outcomes = function(object, ready) {
 prior_joint_summary_comparison = function(object) {
   joint = object$joint
   parameters = names(joint$problem$mean)
-  changed = parameters[!vapply(parameters, function(name)
-    identical(object$selected[[name]], joint$baseline[[name]]), logical(1))]
+  indirect = prior_indirect_report(object, verified = TRUE)
+  changed = parameters[indirect$changed[parameters]]
   rows = list()
   for (parameter in changed) {
     if (length(rows)) rows[[length(rows) + 1L]] = c("", "", "")
@@ -795,8 +795,14 @@ prior_joint_summary_coefficients = function(object, ready) {
     return(invisible(NULL))
   }
   rows = prior_joint_summary_comparison(object)
-  if (is.null(rows)) { cat("No coefficient priors changed.\n")
-    return(invisible(NULL)) }
+  indirect = prior_indirect_report(object, verified = TRUE)
+  report = prior_report_table(object, indirect)
+  if (is.null(rows)) {
+    cat("No coefficient priors changed.\n")
+    prior_report_unchanged_participants(indirect)
+    prior_report_indirect_note(indirect)
+    return(invisible(NULL))
+  }
   widths = pmax(nchar(names(rows)), vapply(rows, function(column) max(nchar(column)), integer(1)))
   console = max(40L, getOption("width", 80L))
   widths[1] = min(widths[1], max(12, console - sum(widths[-1]) - 4))
@@ -806,8 +812,17 @@ prior_joint_summary_coefficients = function(object, ready) {
   }
   prior_joint_summary_row(as.list(names(rows)), widths)
   cat(strrep("-", sum(widths) + 4), "\n", sep = "")
-  for (i in seq_len(nrow(rows))) prior_joint_summary_row(as.list(rows[i, ]), widths)
-  cat("Other priors unchanged.\n")
+  for (i in seq_len(nrow(rows))) {
+    prior_joint_summary_row(as.list(rows[i, ]), widths)
+    parameter = rows[[1]][i]
+    if (!parameter %in% report$Parameter || !nzchar(parameter) ||
+        nzchar(rows$Before[i]) || nzchar(rows$After[i])) next
+    entry = report[report$Parameter == parameter, , drop = FALSE]
+    cat("  ", entry$Source, "; ", entry$Beliefs, if (indirect$count[parameter] == 0) " direct" else "", "\n", sep = "")
+  }
+  cat(if (prior_has_r_squared(object)) "Other coefficient priors unchanged.\n" else "Other priors unchanged.\n")
+  prior_report_unchanged_participants(indirect)
+  prior_report_indirect_note(indirect)
 }
 
 prior_joint_summary = function(x) {

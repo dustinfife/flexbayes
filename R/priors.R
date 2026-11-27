@@ -98,27 +98,12 @@ prior_console_line = function(text) {
 print.flexbayes_priors = function(x, ...) {
   cat("Priors (", x$backend$package, " ", x$backend$version, ")\n", sep = "")
   if (x$backend$package == "brms") prior_console_line("Defaults: flexbayes proper priors derived from rstanarm 2.32.2; native brms defaults are overridden.")
-  source = vapply(names(x$selected), function(name) {
-    if (!is.null(x$fallbacks[[name]])) {
-      if (x$fallbacks[[name]]$source != "backend_default") return("Previous elicited (fallback)")
-      return(if (x$backend$package == "brms") "flexbayes default (fallback)" else "Backend default (fallback)")
-    }
-    if (identical(x$candidates[[name]]$status, "contradictory")) return("Contradictory")
-    if (identical(x$candidates[[name]]$status, "backend_incompatible")) return("Incompatible")
-    if (is.null(x$selected[[name]])) return("Unresolved")
-    if (!is.null(x$joint) && name %in% names(x$joint$problem$mean) &&
-        !isTRUE(all.equal(x$joint$baseline[[name]], x$selected[[name]]))) {
-      return(if (length(x$beliefs[[name]])) "Adjusted (elicited)" else "Adjusted (default)")
-    }
-    if (!length(x$beliefs[[name]])) return(if (x$backend$package == "brms") "flexbayes default" else "Backend default")
-    if (isTRUE(x$candidates[[name]]$reference_used)) return("Elicited*")
-    "Elicited"
-  }, character(1))
-  table = data.frame(Parameter = names(x$selected),
-    Prior = vapply(x$selected, prior_format, character(1)),
-    Source = unname(source), Beliefs = lengths(x$beliefs), row.names = NULL)
+  indirect = prior_indirect_report(x)
+  table = prior_report_table(x, indirect)
+  source = table$Source
   print(table, row.names = FALSE, right = FALSE)
   if (any(source == "Elicited*")) prior_console_line(if (x$backend$package == "brms") "* Universal flexbayes default used to resolve underdetermined beliefs; see diagnostics for the retained reference moment." else "* Backend default used to resolve underdetermined beliefs.")
+  prior_report_indirect_note(indirect)
   if (length(prior_fallback_issues(x))) prior_console_line("Fallback priors are available for inspection; current elicitation was unsuccessful. See summary() before using allow_fallback = TRUE.")
   if (!is.null(x$joint)) cat("Outcome reconciliation:", x$joint$status, ";", length(x$outcomes), "configuration(s).\n")
   invisible(x)
@@ -136,6 +121,27 @@ print.flexbayes_priors = function(x, ...) {
 #' and the reason the current beliefs were not verified.
 #' Unverified reconciliations are clearly flagged. Complete comparisons,
 #' backend-centering references and optimization statistics require diagnostics=TRUE.
+#' @details
+#' The compact table in `print(priors)` distinguishes where each prior came
+#' from. A changed prior informed by one outcome or difference specification
+#' involving only that coefficient is labelled `Elicited via outcome` or
+#' `Elicited via difference`. Shared constraints, several specifications, or
+#' combined parameter and indirect beliefs use the general label `Reconciled`.
+#' These labels describe the route, not a guarantee of unique identification.
+#'
+#' Plain belief counts refer to beliefs supplied for that parameter. An entry
+#' such as `2 indirect` counts outcome/difference statements involving the
+#' coefficient. Mixed counts such as `1 + 2` mean one parameter belief plus two
+#' indirect statements. A shared statement can involve several coefficients:
+#' row counts must not be added as if they were separate pieces of information.
+#' The total counts each supplied statement once, including repeated statements.
+#'
+#' Participation does not imply a changed prior. Unchanged participants keep
+#' their previous source; the grouped summary lists them separately. Changed
+#' groups display the same source and counts as `print(priors)`. Unverified
+#' indirect participation is labelled pending, and existing fallback labels
+#' remain in place. R-squared beliefs supplied for sigma stay in sigma's
+#' parameter-belief count, not the indirect counts for coefficients.
 #' @param object A prior specification.
 #' @param diagnostics Include constraint targets, achieved values, standardized
 #'   residuals, and candidate fit scores. Outcome reconciliation additionally

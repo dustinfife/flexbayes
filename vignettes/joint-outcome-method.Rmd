@@ -106,6 +106,31 @@ fallback safeguard is explicitly approved. Nonzero contrasts retain the existing
 feasibility, stationarity and raw-belief checks, including numerical recovery
 for difficult constraint regions; no new optimizer or relaxed tolerance is used.
 
+### Reading direct and indirect beliefs
+
+The compact prior table reports both the source of a prior and the statements
+involving it. In the square-footage example, `sqft` is labelled
+`Elicited via difference`, with `2 indirect` beliefs. The intercept and unchanged
+predictor terms cancel and receive no indirect count from that difference.
+
+When a statement involves several coefficients, several configurations are
+combined, or direct coefficient beliefs also apply, a changed prior is labelled
+`Reconciled`. That label does not claim that one statement uniquely identified
+the coefficient. Mixed counts such as `1 + 2` mean one parameter belief and two
+indirect statements. A shared statement may appear on several rows; the printed
+total counts it once. Do not add row counts as independent pieces of information.
+
+A coefficient can participate without its prior changing. Those rows keep their
+previous source, and the grouped summary identifies unchanged participants.
+Changed groups show the same source and counts as the compact table. Source
+comparisons use R's standard numerical comparison in starting-prior SD units,
+so changing predictor units does not change a source label. A small change is
+still shown if a recorded coefficient belief was compromised. Neither display
+rule changes any fitting tolerance or acceptance test. Failed attempts show pending
+participation alongside retained fallback labels, not an elicited replacement.
+R-squared beliefs supplied for sigma remain in sigma's parameter-belief count;
+they do not add indirect constraints to the fixed coefficient priors.
+
 ## Eliciting sigma through model R-squared
 
 A researcher may know how much variation the model should explain without

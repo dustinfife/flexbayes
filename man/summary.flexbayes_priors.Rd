@@ -33,3 +33,25 @@ and the reason the current beliefs were not verified.
 Unverified reconciliations are clearly flagged. Complete comparisons,
 backend-centering references and optimization statistics require diagnostics=TRUE.
 }
+\details{
+The compact table in \code{print(priors)} distinguishes where each prior came
+from. A changed prior informed by one outcome or difference specification
+involving only that coefficient is labelled \verb{Elicited via outcome} or
+\verb{Elicited via difference}. Shared constraints, several specifications, or
+combined parameter and indirect beliefs use the general label \code{Reconciled}.
+These labels describe the route, not a guarantee of unique identification.
+
+Plain belief counts refer to beliefs supplied for that parameter. An entry
+such as \verb{2 indirect} counts outcome/difference statements involving the
+coefficient. Mixed counts such as \code{1 + 2} mean one parameter belief plus two
+indirect statements. A shared statement can involve several coefficients:
+row counts must not be added as if they were separate pieces of information.
+The total counts each supplied statement once, including repeated statements.
+
+Participation does not imply a changed prior. Unchanged participants keep
+their previous source; the grouped summary lists them separately. Changed
+groups display the same source and counts as \code{print(priors)}. Unverified
+indirect participation is labelled pending, and existing fallback labels
+remain in place. R-squared beliefs supplied for sigma stay in sigma's
+parameter-belief count, not the indirect counts for coefficients.
+}
